@@ -211,6 +211,9 @@ export ModuleData parseModuleData(const path&file)
 			importing=true;
 		}
 	}
-	md.name.pop_back();
+	if(!md.name.empty())
+	{
+		md.name.pop_back();
+	}
 	return md;
 }

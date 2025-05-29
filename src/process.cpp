@@ -6,7 +6,7 @@ export class ParallelProcessManager
 {
 	uint8_t maximum;
 	bool needToWait;
-	unordered_set<int>processes;
+	unordered_set<unsigned>processes;
 public:
 	ParallelProcessManager(uint8_t m)
 		noexcept
@@ -16,7 +16,7 @@ public:
 		noexcept
 		:ParallelProcessManager(1)
 	{}
-	optional<int>run(span<char*>args)
+	optional<unsigned>run(span<char*>args,bool printCommand)
 	{
 		if(needToWait)
 		{
@@ -24,32 +24,49 @@ public:
 			size_t removed=0;
 			while(status)
 			{
-				removed+=processes.erase(status->first);
+				removed+=processes.erase((unsigned)status->first);
 				status=check_finished_process();
 			}
 			while(removed==0)
 			{
 				status=wait();
-				removed+=status&&processes.erase(status->first);
+				removed+=status&&processes.erase((unsigned)status->first);
 			}
 			needToWait=false;
+		}
+		if(printCommand)
+		{
+			bool notFirst=false;
+			for(char*a:args.first(args.size()-1))
+			{
+				if(notFirst)
+				{
+					print(" {}",a);
+				}
+				else
+				{
+					print("{}",a);
+				}
+				notFirst=true;
+			}
+			print("\n");
 		}
 		auto oid=launch_program(args);
 		if(oid)
 		{
-			processes.insert(*oid);
+			processes.insert((unsigned)*oid);
 			needToWait=(uint8_t)processes.size()==maximum;
 		}
 		return oid;
 	}
-	void wait_all_processes(span<int>idArray)
+	void wait_all_processes(span<unsigned>idArray)
 		noexcept
 	{
-		for(int id:idArray)
+		for(unsigned id:idArray)
 		{
 			if(processes.erase(id))
 			{
-				wait(id);
+				wait((int)id);
 				needToWait=false;
 			}
 		}
@@ -62,7 +79,7 @@ public:
 			auto status=wait();
 			if(status)
 			{
-				processes.erase(status->first);
+				processes.erase((unsigned)status->first);
 			}
 		}
 		needToWait=false;

@@ -14,6 +14,7 @@ constexpr string_view CBP_COMPILE_FLAG="-c";
 constexpr string_view CBP_OUTPUT_FLAG="-o";
 constexpr string_view CBP_LANGUAGE_FLAG="-x";
 constexpr string_view CBP_MODULE_LANGUAGE="c++-module";
+constexpr string_view CBP_LANGUAGE_VERSION="-std=c++20";
 constexpr string_view CBP_STDLIB_FLAG="-stdlib=libc++";
 constexpr string_view CBP_CLANG="clang++";
 constexpr string_view CBP_GCC="g++";
@@ -24,9 +25,10 @@ export enum CompilerType
 export struct ModuleCompilation
 {
 	vector<ImportUnit>dependency;
+	path output;
 	file_time_type source;
 	file_time_type object;
-	vector<int>dependentProcesses;
+	vector<unsigned>dependentProcesses;
 	string name;
 	bool visited;
 };
@@ -71,8 +73,6 @@ public:
 		{
 			auto&[entry,dependIt]=filestack.back();
 			auto&[filepath,md]=*entry;
-			path outfile=filepath;
-			outfile.replace_extension(path("o"));
 			if(dependIt!=md.dependency.cend())
 			{
 				auto it=connections.primaryModuleInterfaceUnits.find(dependIt->name);
@@ -88,11 +88,11 @@ public:
 			}
 			else
 			{
-				linkerArguments.push_back(outfile.string());
-				if(md.source>md.object)
+				linkerArguments.push_back(md.output.string());
+				if(options.forceCompile||md.source>md.object)
 				{
 					string filepathString=filepath.string();
-					string outfileString=outfile.string();
+					string outfileString=md.output.string();
 					string moduleString;
 					vector<char*>addback;
 					compilerArguments.push_back(filepathString.data());
@@ -118,9 +118,8 @@ public:
 						}
 					}
 					println("{}",views::transform(md.dependency,&ImportUnit::name));
-					println("{}",compilerArguments);
 					compilerArguments.push_back(nullptr);
-					pm.run(compilerArguments);
+					pm.run(compilerArguments,options.displayCommand);
 					md.object=file_clock::now();
 					if(addback.size())
 					{
@@ -138,25 +137,28 @@ public:
 		ModuleData data=parseModuleData(p);
 		path object(p);
 		object.replace_extension(path("o"));
+		if(options.objectDirectory.size())
+		{
+			object=path(options.objectDirectory)/object;
+		}
 		file_time_type lastModify=last_write_time(p);
 		file_time_type objectModify=exists(object)?last_write_time(object):file_time_type();
-		println("{} {}",data.name,data.imports.size());
 		connections.primaryModuleInterfaceUnits.emplace(data.name,p);
-		connections.files.emplace(std::move(p),ModuleCompilation(std::move(data.imports),lastModify,objectModify,{},std::move(data.name),false));
+		connections.files.emplace(std::move(p),ModuleCompilation(std::move(data.imports),object,lastModify,objectModify,{},std::move(data.name),false));
 	}
 	void add_directory(const path&p)
 	{
 		using namespace string_view_literals;
 		auto permitted=ranges::to<vector<string>>(views::split(CBP_ALLOWED_EXTENSIONS," "sv));
 		auto file_range=filter(recursive_directory_iterator(p),[&permitted](const directory_entry&en){return ranges::contains(permitted,en.path().extension().string().substr(1))&&en.is_regular_file();});
-		println("{}",permitted);
 		for(path p:file_range)
 		{
 			add_file(std::move(p));
 		}
 	}
-	void cpbuild(span<string_view>targets)
+	void cpbuild()
 	{
+		span<string_view>targets=options.targets;
 		switch(ct)
 		{
 			case LLVM:
@@ -168,7 +170,11 @@ public:
 				linkerArguments.push_back(string{CBP_GCC});
 				break;
 		}
-		compilerArguments.push_back(const_cast<char*>(options.languageVersion.data()));
+		bool addLanguageVersion=ranges::find_if(options.compilerOptions,[](string_view sv){return sv.starts_with("-std=");})==options.compilerOptions.end();
+		if(addLanguageVersion)
+		{
+			compilerArguments.push_back(const_cast<char*>(CBP_LANGUAGE_VERSION.data()));
+		}
 		switch(ct)
 		{
 			case LLVM:
@@ -182,6 +188,8 @@ public:
 				compilerArguments.push_back(const_cast<char*>(CBP_GCC_MODULE_FLAG.data()));
 				break;
 		}
+		auto svConstCaster=[](string_view sv){return const_cast<char*>(sv.data());};
+		compilerArguments.append_range(views::transform(options.compilerOptions,svConstCaster));
 		for(path t:targets)
 		{
 			if(is_directory(t))
@@ -199,9 +207,9 @@ public:
 		linkerArguments.push_back(string{CBP_OUTPUT_FLAG});
 		linkerArguments.push_back(product.string());
 		auto trueLinkerArguments=ranges::to<vector<char*>>(views::transform(linkerArguments,[](string&s){return s.data();}));
+		trueLinkerArguments.append_range(views::transform(options.linkerOptions,svConstCaster));
 		trueLinkerArguments.push_back(nullptr);
-		println("{}",linkerArguments);
-		pm.run(trueLinkerArguments);
+		pm.run(trueLinkerArguments,options.displayCommand);
 		pm.wait_remaining_processes();
 	}
 	~ProgramBuilder()=default;

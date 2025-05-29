@@ -7,11 +7,11 @@ int mainpp(span<string_view>args)
 {
 	string_view program=args.front();
 	CompilerType compilertype=args[1]=="GNU"?GNU:LLVM;
-	BuildConfiguration configuration{args[2]};
+	BuildConfiguration configuration=parseBuildConfiguration(args.subspan(2));
 	ProgramBuilder&builder=ProgramBuilder::getInstance(program,compilertype,std::move(configuration));
 	cout.write(program.data(),program.size());
 	cout.put('\n');
-	builder.cpbuild(args.last(args.size()-3));
+	builder.cpbuild();
 	return 0;
 }
 int main(int argl,char**argv)
