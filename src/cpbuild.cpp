@@ -50,11 +50,10 @@ class ProgramBuilder
 	vector<string>linkerArguments;
 	ModuleConnection connections;
 	ParallelProcessManager pm;
-	unordered_set<path>existingDirectories;
 public:
 	ProgramBuilder(ProgramBuilderConstructorTag,string_view name,CompilerType type,BuildConfiguration op)
 		noexcept
-		:name(name),ct(type),options(std::move(op)),compilerArguments(),linkerArguments(),connections(),pm(),existingDirectories()
+		:name(name),ct(type),options(std::move(op)),compilerArguments(),linkerArguments(),connections(),pm()
 	{}
 	ProgramBuilder()=delete;
 	ProgramBuilder(const ProgramBuilder&)=delete;
@@ -149,12 +148,6 @@ public:
 		{
 			object=path(options.objectDirectory)/object;
 		}
-		path objectParent=object;
-		objectParent.remove_filename();
-		if(existingDirectories.insert(objectParent).second)
-		{
-			create_directories(objectParent);
-		}
 		file_time_type lastModify=last_write_time(p);
 		file_time_type objectModify=exists(object)?last_write_time(object):lastModify-10s;
 		connections.primaryModuleInterfaceUnits.emplace(data.name,p);
@@ -164,10 +157,21 @@ public:
 	{
 		using namespace string_view_literals;
 		auto permitted=ranges::to<vector<string>>(views::split(CBP_ALLOWED_EXTENSIONS," "sv));
-		auto file_range=filter(recursive_directory_iterator(p),[&permitted](const directory_entry&en){return ranges::contains(permitted,en.path().extension().string().substr(1))&&en.is_regular_file();});
-		for(path p:file_range)
+		for(const auto&en:recursive_directory_iterator(p))
 		{
-			add_file(std::move(p));
+			const path&current=en.path();
+			if(en.is_directory())
+			{
+				if(options.objectDirectory.size())
+				{
+					path out=path{options.objectDirectory}/current;
+					create_directory(out);
+				}
+			}
+			else if(current.has_extension()&&ranges::contains(permitted,current.extension().string().substr(1))&&en.is_regular_file())
+			{
+				add_file(path(current));
+			}
 		}
 	}
 	void cpbuild()
