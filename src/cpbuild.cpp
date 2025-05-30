@@ -50,10 +50,11 @@ class ProgramBuilder
 	vector<string>linkerArguments;
 	ModuleConnection connections;
 	ParallelProcessManager pm;
+	unordered_set<path>existingDirectories;
 public:
 	ProgramBuilder(ProgramBuilderConstructorTag,string_view name,CompilerType type,BuildConfiguration op)
 		noexcept
-		:name(name),ct(type),options(std::move(op)),compilerArguments(),linkerArguments(),connections(),pm()
+		:name(name),ct(type),options(std::move(op)),compilerArguments(),linkerArguments(),connections(),pm(),existingDirectories()
 	{}
 	ProgramBuilder()=delete;
 	ProgramBuilder(const ProgramBuilder&)=delete;
@@ -103,7 +104,13 @@ public:
 					{
 						if(md.name.size())
 						{
-							moduleString="-fmodule-output="+md.name;
+							moduleString="-fmodule-output=";
+							if(options.objectDirectory.size())
+							{
+								moduleString+=string{options.objectDirectory};
+								moduleString+='/';
+							}
+							moduleString+=md.name;
 							moduleString+=".pcm";
 							for(char&c:moduleString)
 							{
@@ -134,6 +141,7 @@ public:
 	}
 	void add_file(path&&p)
 	{
+		using namespace chrono_literals;
 		ModuleData data=parseModuleData(p);
 		path object(p);
 		object.replace_extension(path("o"));
@@ -141,8 +149,14 @@ public:
 		{
 			object=path(options.objectDirectory)/object;
 		}
+		path objectParent=object;
+		objectParent.remove_filename();
+		if(existingDirectories.insert(objectParent).second)
+		{
+			create_directories(objectParent);
+		}
 		file_time_type lastModify=last_write_time(p);
-		file_time_type objectModify=exists(object)?last_write_time(object):file_time_type();
+		file_time_type objectModify=exists(object)?last_write_time(object):lastModify-10s;
 		connections.primaryModuleInterfaceUnits.emplace(data.name,p);
 		connections.files.emplace(std::move(p),ModuleCompilation(std::move(data.imports),object,lastModify,objectModify,{},std::move(data.name),false));
 	}
@@ -159,6 +173,8 @@ public:
 	void cpbuild()
 	{
 		span<string_view>targets=options.targets;
+		string clangPrebuiltModuleFlag;
+		const char*flagData=CBP_CLANG_MODULE_PATH.data();
 		switch(ct)
 		{
 			case LLVM:
@@ -178,8 +194,14 @@ public:
 		switch(ct)
 		{
 			case LLVM:
+				if(options.objectDirectory.size())
+				{
+					clangPrebuiltModuleFlag=string{CBP_CLANG_MODULE_PATH.data(),CBP_CLANG_MODULE_PATH.size()-1};
+					clangPrebuiltModuleFlag.append_range(options.objectDirectory);
+					flagData=clangPrebuiltModuleFlag.data();
+				}
 				compilerArguments.push_back(const_cast<char*>(CBP_STDLIB_FLAG.data()));
-				compilerArguments.push_back(const_cast<char*>(CBP_CLANG_MODULE_PATH.data()));
+				compilerArguments.push_back(const_cast<char*>(flagData));
 				compilerArguments.push_back(const_cast<char*>(CBP_LANGUAGE_FLAG.data()));
 				compilerArguments.push_back(const_cast<char*>(CBP_MODULE_LANGUAGE.data()));
 				linkerArguments.push_back(string{CBP_STDLIB_FLAG});

@@ -1,7 +1,6 @@
 export module configuration;
 import std;
 using namespace std;
-using views::enumerate;
 constexpr char COMPILER_OPTION_FLAG='c';
 constexpr char LINKER_OPTION_FLAG='l';
 constexpr char OUTPUT_OPTION_FLAG='o';
@@ -18,6 +17,7 @@ export struct BuildConfiguration
 };
 export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 {
+	using views::enumerate;
 	BuildConfiguration configuration;
 	variant<monostate,string_view*,span<string_view>*>consumeInto;
 	size_t consume=0;
@@ -39,7 +39,7 @@ export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 			}
 			--consume;
 		}
-		if(sv.size()>=2&&sv.front()=='-')
+		else if(sv.size()>=2&&sv.front()=='-')
 		{
 			switch(sv[1])
 			{
@@ -51,6 +51,7 @@ export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 					break;
 				case OUTPUT_OPTION_FLAG:
 					consumeInto=&configuration.objectDirectory;
+					consume=1;
 					break;
 				case DISPLAY_OPTION_FLAG:
 					configuration.displayCommand=true;
