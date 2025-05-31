@@ -70,9 +70,38 @@ public:
 		}
 		if(options.objectDirectory.size())
 		{
+			if(options.targets.size()==1)
+			{
+				string pathString=p.string();
+				size_t index=pathString.find('/');
+				index=index==string::npos?pathString.size()-1:index;
+				string_view sv{pathString.cbegin()+index+1,pathString.cend()};
+				p=sv;
+			}
 			p=path{options.objectDirectory}/p;
 		}
 		return p;
+	}
+	path getFinalOutputFile()
+		const noexcept
+	{
+		if(options.artifact.size()==0)
+		{
+			if(options.targets.size()&&is_regular_file(path{options.targets.front()}))
+			{
+				path output(options.targets.front());
+				output.replace_extension();
+				return output;
+			}
+			else
+			{
+				return absolute(current_path()).filename();
+			}
+		}
+		else
+		{
+			return path{options.artifact};
+		}
 	}
 	void build_file(FileModuleMap::reference data)
 	{
@@ -253,7 +282,7 @@ public:
 		}
 		ranges::for_each(connections.files,bind_front(&ProgramBuilder::build_file,this));
 		pm.wait_remaining_processes();
-		const path product=options.artifact.size()==0?current_path().filename():path{options.artifact};
+		const path product=getFinalOutputFile();
 		linkerArguments.push_back(string{CBP_OUTPUT_FLAG});
 		linkerArguments.push_back(product.string());
 		auto trueLinkerArguments=ranges::to<vector<char*>>(views::transform(linkerArguments,[](string&s){return s.data();}));
