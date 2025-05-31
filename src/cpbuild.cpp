@@ -60,6 +60,19 @@ public:
 	ProgramBuilder(ProgramBuilder&&)=delete;
 	ProgramBuilder&operator=(const ProgramBuilder&)=delete;
 	ProgramBuilder&operator=(ProgramBuilder&&)=delete;
+	path getOutputFile(path p)
+		const noexcept
+	{
+		if(p.has_extension())
+		{
+			p.replace_extension(path{"o"});
+		}
+		if(options.objectDirectory.size())
+		{
+			p=path{options.objectDirectory}/p;
+		}
+		return p;
+	}
 	void build_file(FileModuleMap::reference data)
 	{
 		vector<pair<FileModuleMap::pointer,vector<ImportUnit>::const_iterator>>filestack;
@@ -142,14 +155,9 @@ public:
 	{
 		using namespace chrono_literals;
 		ModuleData data=parseModuleData(p);
-		path object(p);
-		object.replace_extension(path("o"));
-		if(options.objectDirectory.size())
-		{
-			object=path(options.objectDirectory)/object;
-		}
-		file_time_type lastModify=last_write_time(p);
-		file_time_type objectModify=exists(object)?last_write_time(object):lastModify-10s;
+		const path object=getOutputFile(p);
+		const file_time_type lastModify=last_write_time(p);
+		const file_time_type objectModify=exists(object)?last_write_time(object):lastModify-10s;
 		connections.primaryModuleInterfaceUnits.emplace(data.name,p);
 		connections.files.emplace(std::move(p),ModuleCompilation(std::move(data.imports),object,lastModify,objectModify,{},std::move(data.name),false));
 	}
@@ -162,11 +170,7 @@ public:
 			const path&current=en.path();
 			if(en.is_directory())
 			{
-				if(options.objectDirectory.size())
-				{
-					path out=path{options.objectDirectory}/current;
-					create_directory(out);
-				}
+				create_directory(getOutputFile(current));
 			}
 			else if(current.has_extension()&&ranges::contains(permitted,current.extension().string().substr(1))&&en.is_regular_file())
 			{
@@ -194,6 +198,23 @@ public:
 		if(addLanguageVersion)
 		{
 			compilerArguments.push_back(const_cast<char*>(CBP_LANGUAGE_VERSION.data()));
+		}
+		if(options.objectDirectory.size()&&ct==GNU)
+		{
+			path cmcache("gcm.cache");
+			path target{options.objectDirectory};
+			if(!exists(cmcache))
+			{
+				create_directory_symlink(target,cmcache);
+			}
+			else if(is_symlink(cmcache))
+			{
+				if(read_symlink(cmcache)!=target)
+				{
+					remove(cmcache);
+					create_directory_symlink(target,cmcache);
+				}
+			}
 		}
 		switch(ct)
 		{

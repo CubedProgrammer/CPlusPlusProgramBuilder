@@ -14,6 +14,9 @@ export struct BuildConfiguration
 	bool displayCommand;
 	bool forceCompile;
 	vector<string_view>targets;
+	BuildConfiguration()
+		:objectDirectory(),compilerOptions(),linkerOptions(),displayCommand(),forceCompile(),targets()
+	{}
 };
 export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 {
