@@ -7,6 +7,7 @@ using std::chrono::file_clock;
 using std::filesystem::current_path,std::filesystem::directory_entry,std::filesystem::file_time_type,std::filesystem::path,std::filesystem::recursive_directory_iterator;
 using std::views::filter;
 using namespace std;
+using namespace chrono_literals;
 constexpr string_view CBP_ALLOWED_EXTENSIONS="c++ c++m cc ccm cpp cppm cxx cxxm";
 constexpr string_view CBP_GCC_MODULE_FLAG="-fmodules";
 constexpr string_view CBP_CLANG_MODULE_PATH="-fprebuilt-module-path=.";
@@ -96,6 +97,10 @@ public:
 					{
 						filestack.emplace_back(to_address(fileIt),fileIt->second.dependency.cbegin());
 					}
+					else if(fileIt->second.source>fileIt->second.object)
+					{
+						md.object=md.source-1s;
+					}
 				}
 				++dependIt;
 			}
@@ -139,7 +144,6 @@ public:
 					println("{}",views::transform(md.dependency,&ImportUnit::name));
 					compilerArguments.push_back(nullptr);
 					pm.run(compilerArguments,options.displayCommand);
-					md.object=file_clock::now();
 					if(addback.size())
 					{
 						compilerArguments.insert_range(compilerArguments.begin()+argumentLength-2,addback);
@@ -153,11 +157,10 @@ public:
 	}
 	void add_file(path&&p)
 	{
-		using namespace chrono_literals;
 		ModuleData data=parseModuleData(p);
 		const path object=getOutputFile(p);
 		const file_time_type lastModify=last_write_time(p);
-		const file_time_type objectModify=exists(object)?last_write_time(object):lastModify-10s;
+		const file_time_type objectModify=exists(object)?last_write_time(object):lastModify-1s;
 		connections.primaryModuleInterfaceUnits.emplace(data.name,p);
 		connections.files.emplace(std::move(p),ModuleCompilation(std::move(data.imports),object,lastModify,objectModify,{},std::move(data.name),false));
 	}
@@ -250,7 +253,7 @@ public:
 		}
 		ranges::for_each(connections.files,bind_front(&ProgramBuilder::build_file,this));
 		pm.wait_remaining_processes();
-		path product=current_path().filename();
+		const path product=options.artifact.size()==0?current_path().filename():path{options.artifact};
 		linkerArguments.push_back(string{CBP_OUTPUT_FLAG});
 		linkerArguments.push_back(product.string());
 		auto trueLinkerArguments=ranges::to<vector<char*>>(views::transform(linkerArguments,[](string&s){return s.data();}));

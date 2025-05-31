@@ -6,16 +6,18 @@ constexpr char LINKER_OPTION_FLAG='l';
 constexpr char OUTPUT_OPTION_FLAG='o';
 constexpr char DISPLAY_OPTION_FLAG='s';
 constexpr char FORCE_OPTION_FLAG='f';
+constexpr char ARTIFACT_OPTION_FLAG='a';
 export struct BuildConfiguration
 {
 	string_view objectDirectory;
+	string_view artifact;
 	span<string_view>compilerOptions;
 	span<string_view>linkerOptions;
 	bool displayCommand;
 	bool forceCompile;
 	vector<string_view>targets;
 	BuildConfiguration()
-		:objectDirectory(),compilerOptions(),linkerOptions(),displayCommand(),forceCompile(),targets()
+		:objectDirectory(),artifact(),compilerOptions(),linkerOptions(),displayCommand(),forceCompile(),targets()
 	{}
 };
 export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
@@ -62,7 +64,12 @@ export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 				case FORCE_OPTION_FLAG:
 					configuration.forceCompile=true;
 					break;
+				case ARTIFACT_OPTION_FLAG:
+					consumeInto=&configuration.artifact;
+					consume=1;
+					break;
 				default:
+					println("Unrecognized flag {} from argument {} will be ignored.",sv[1],sv);
 					break;
 			}
 			if(consumeInto.index()==2)
