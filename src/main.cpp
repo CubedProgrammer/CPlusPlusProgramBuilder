@@ -1,14 +1,15 @@
 import std;
 import configuration;
 import cpbuild;
+import flag;
 using namespace std;
 int mainpp(span<string_view>args)
 	noexcept
 {
 	string_view program=args.front();
-	CompilerType compilertype=args[1]=="GNU"?GNU:LLVM;
-	BuildConfiguration configuration=parseBuildConfiguration(args.subspan(2));
-	ProgramBuilder&builder=ProgramBuilder::getInstance(program,compilertype,std::move(configuration));
+	BuildConfiguration configuration=parseBuildConfiguration(args.subspan(1));
+	auto ci=getCompilerInformation(configuration);
+	ProgramBuilder&builder=ProgramBuilder::getInstance(program,std::move(ci),std::move(configuration));
 	cout.write(program.data(),program.size());
 	cout.put('\n');
 	builder.cpbuild();

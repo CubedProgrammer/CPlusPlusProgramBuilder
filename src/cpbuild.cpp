@@ -2,10 +2,10 @@ export module cpbuild;
 import std;
 import configuration;
 import dependency;
+import flag;
 import process;
 using std::chrono::file_clock;
-using std::filesystem::current_path,std::filesystem::directory_entry,std::filesystem::file_time_type,std::filesystem::path,std::filesystem::recursive_directory_iterator;
-using std::views::filter;
+using std::filesystem::current_path,std::filesystem::file_time_type,std::filesystem::path,std::filesystem::recursive_directory_iterator;
 using namespace std;
 using namespace chrono_literals;
 constexpr string_view CBP_ALLOWED_EXTENSIONS="c++ c++m cc ccm cpp cppm cxx cxxm";
@@ -19,10 +19,6 @@ constexpr string_view CBP_LANGUAGE_VERSION="-std=c++20";
 constexpr string_view CBP_STDLIB_FLAG="-stdlib=libc++";
 constexpr string_view CBP_CLANG="clang++";
 constexpr string_view CBP_GCC="g++";
-export enum CompilerType
-{
-	LLVM,GNU
-};
 export struct ModuleCompilation
 {
 	vector<ImportUnit>dependency;
@@ -45,16 +41,16 @@ struct ProgramBuilderConstructorTag{};
 class ProgramBuilder
 {
 	string_view name;
-	CompilerType ct;
+	pair<CompilerType,vector<string>>typeAndInclude;
 	BuildConfiguration options;
 	vector<char*>compilerArguments;
 	vector<string>linkerArguments;
 	ModuleConnection connections;
 	ParallelProcessManager pm;
 public:
-	ProgramBuilder(ProgramBuilderConstructorTag,string_view name,CompilerType type,BuildConfiguration op)
+	ProgramBuilder(ProgramBuilderConstructorTag,string_view name,pair<CompilerType,vector<string>>tai,BuildConfiguration op)
 		noexcept
-		:name(name),ct(type),options(std::move(op)),compilerArguments(),linkerArguments(),connections(),pm()
+		:name(name),typeAndInclude(std::move(tai)),options(std::move(op)),compilerArguments(),linkerArguments(),connections(),pm()
 	{}
 	ProgramBuilder()=delete;
 	ProgramBuilder(const ProgramBuilder&)=delete;
@@ -107,6 +103,7 @@ public:
 	{
 		vector<pair<FileModuleMap::pointer,vector<ImportUnit>::const_iterator>>filestack;
 		size_t argumentLength=compilerArguments.size();
+		CompilerType ct=typeAndInclude.first;
 		println("Building {}",data.first.string());
 		if(!data.second.visited)
 		{
@@ -214,18 +211,10 @@ public:
 	{
 		span<string_view>targets=options.targets;
 		string clangPrebuiltModuleFlag;
+		CompilerType ct=typeAndInclude.first;
 		const char*flagData=CBP_CLANG_MODULE_PATH.data();
-		switch(ct)
-		{
-			case LLVM:
-				compilerArguments.push_back(const_cast<char*>(CBP_CLANG.data()));
-				linkerArguments.push_back(string{CBP_CLANG});
-				break;
-			case GNU:
-				compilerArguments.push_back(const_cast<char*>(CBP_GCC.data()));
-				linkerArguments.push_back(string{CBP_GCC});
-				break;
-		}
+		compilerArguments.push_back(const_cast<char*>(CBP_COMPILER_NAME.data()));
+		linkerArguments.push_back(string{CBP_COMPILER_NAME});
 		bool addLanguageVersion=ranges::find_if(options.compilerOptions,[](string_view sv){return sv.starts_with("-std=");})==options.compilerOptions.end();
 		if(addLanguageVersion)
 		{
@@ -292,12 +281,12 @@ public:
 		pm.wait_remaining_processes();
 	}
 	~ProgramBuilder()=default;
-	static ProgramBuilder&getInstance(string_view program,CompilerType t,BuildConfiguration options)
+	static ProgramBuilder&getInstance(string_view program,pair<CompilerType,vector<string>>tai,BuildConfiguration options)
 		noexcept
 	{
 		if(!singletonPointerProgramBuilder)
 		{
-			singletonPointerProgramBuilder=make_unique<ProgramBuilder>(ProgramBuilderConstructorTag{},program,t,std::move(options));
+			singletonPointerProgramBuilder=make_unique<ProgramBuilder>(ProgramBuilderConstructorTag{},program,std::move(tai),std::move(options));
 		}
 		return*singletonPointerProgramBuilder;
 	}
