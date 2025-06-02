@@ -7,8 +7,11 @@ constexpr char OUTPUT_OPTION_FLAG='o';
 constexpr char DISPLAY_OPTION_FLAG='s';
 constexpr char FORCE_OPTION_FLAG='f';
 constexpr char ARTIFACT_OPTION_FLAG='a';
+constexpr char LONG_OPTION_FLAG='-';
+export constexpr string_view CBP_COMPILER_NAME="c++";
 export struct BuildConfiguration
 {
+	string_view compiler;
 	string_view objectDirectory;
 	string_view artifact;
 	span<string_view>compilerOptions;
@@ -17,7 +20,7 @@ export struct BuildConfiguration
 	bool forceCompile;
 	vector<string_view>targets;
 	BuildConfiguration()
-		:objectDirectory(),artifact(),compilerOptions(),linkerOptions(),displayCommand(),forceCompile(),targets()
+		:compiler(CBP_COMPILER_NAME),objectDirectory(),artifact(),compilerOptions(),linkerOptions(),displayCommand(),forceCompile(),targets()
 	{}
 };
 export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
@@ -67,6 +70,13 @@ export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 				case ARTIFACT_OPTION_FLAG:
 					consumeInto=&configuration.artifact;
 					consume=1;
+					break;
+				case LONG_OPTION_FLAG:
+					if(sv.substr(2)=="compiler")
+					{
+						consumeInto=&configuration.compiler;
+						consume=1;
+					}
 					break;
 				default:
 					println("Unrecognized flag {} from argument {} will be ignored.",sv[1],sv);

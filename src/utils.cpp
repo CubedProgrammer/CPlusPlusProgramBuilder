@@ -70,6 +70,7 @@ export optional<pair<string,int>>run_and_get_output(span<char*>arguments)
 		}
 		else
 		{
+			dup2(fds[1],STDOUT_FILENO);
 			dup2(fds[1],STDERR_FILENO);
 			close(fds[0]);
 			close(fds[1]);

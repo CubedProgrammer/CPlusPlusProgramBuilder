@@ -102,7 +102,7 @@ public:
 	void build_file(FileModuleMap::reference data)
 	{
 		vector<pair<FileModuleMap::pointer,vector<ImportUnit>::const_iterator>>filestack;
-		size_t argumentLength=compilerArguments.size();
+		size_t argumentLength=compilerArguments.size()-options.compilerOptions.size();
 		CompilerType ct=typeAndInclude.first;
 		println("Building {}",data.first.string());
 		if(!data.second.visited)
@@ -174,7 +174,7 @@ public:
 					{
 						compilerArguments.insert_range(compilerArguments.begin()+argumentLength-2,addback);
 					}
-					compilerArguments.erase(compilerArguments.begin()+argumentLength,compilerArguments.end());
+					compilerArguments.erase(compilerArguments.begin()+argumentLength+options.compilerOptions.size(),compilerArguments.end());
 				}
 				md.visited=true;
 				filestack.pop_back();
@@ -213,8 +213,8 @@ public:
 		string clangPrebuiltModuleFlag;
 		CompilerType ct=typeAndInclude.first;
 		const char*flagData=CBP_CLANG_MODULE_PATH.data();
-		compilerArguments.push_back(const_cast<char*>(CBP_COMPILER_NAME.data()));
-		linkerArguments.push_back(string{CBP_COMPILER_NAME});
+		compilerArguments.push_back(const_cast<char*>(options.compiler.data()));
+		linkerArguments.push_back(string{options.compiler});
 		bool addLanguageVersion=ranges::find_if(options.compilerOptions,[](string_view sv){return sv.starts_with("-std=");})==options.compilerOptions.end();
 		if(addLanguageVersion)
 		{
