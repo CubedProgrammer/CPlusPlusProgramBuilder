@@ -5,6 +5,7 @@ import utils;
 using namespace std;
 constexpr string_view source="int main(int,char**){return 0;}";
 constexpr string_view programPath="/tmp/C++ProgramBuilderBasicProgram.c++";
+constexpr string_view CBP_STDLIB_FLAG="-stdlib=libc++";
 export enum CompilerType
 {
 	LLVM,GNU
@@ -42,6 +43,10 @@ export pair<CompilerType,vector<string>>getCompilerInformation(const BuildConfig
 	}
 	args.erase(args.begin()+1,args.end());
 	args.push_back(verboseFlag.data());
+	if(type==LLVM)
+	{
+		args.push_back(const_cast<char*>(CBP_STDLIB_FLAG.data()));
+	}
 	for(string_view sv:configuration.compilerOptions)
 	{
 		args.push_back(const_cast<char*>(sv.data()));

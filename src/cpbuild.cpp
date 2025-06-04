@@ -35,6 +35,27 @@ export struct ModuleConnection
 	FileModuleMap files;
 	unordered_map<string,path>primaryModuleInterfaceUnits;
 };
+export struct ForwardGraphNode
+{
+	string name;
+	bool header;
+	bool external;
+	constexpr bool operator==(const ForwardGraphNode&)const noexcept=default;
+};
+namespace std
+{
+	template<>
+	struct hash<ForwardGraphNode>
+	{
+		constexpr size_t operator()(const ForwardGraphNode&object)
+			const noexcept
+		{
+			hash<string>shasher;
+			return shasher(object.name)*size_t((int)object.header+(int)object.external+1);
+		}
+	};
+}
+export using ForwardGraph=unordered_map<ForwardGraphNode,pair<uint16_t,vector<ForwardGraphNode>>>;
 export class ProgramBuilder;
 extern unique_ptr<ProgramBuilder>singletonPointerProgramBuilder;
 struct ProgramBuilderConstructorTag{};
@@ -46,11 +67,12 @@ class ProgramBuilder
 	vector<char*>compilerArguments;
 	vector<string>linkerArguments;
 	ModuleConnection connections;
+	ForwardGraph graph;
 	ParallelProcessManager pm;
 public:
 	ProgramBuilder(ProgramBuilderConstructorTag,string_view name,pair<CompilerType,vector<string>>tai,BuildConfiguration op)
 		noexcept
-		:name(name),typeAndInclude(std::move(tai)),options(std::move(op)),compilerArguments(),linkerArguments(),connections(),pm()
+		:name(name),typeAndInclude(std::move(tai)),options(std::move(op)),compilerArguments(),linkerArguments(),connections(),graph(),pm()
 	{}
 	ProgramBuilder()=delete;
 	ProgramBuilder(const ProgramBuilder&)=delete;
@@ -268,6 +290,26 @@ public:
 			{
 				add_file(std::move(t));
 			}
+		}
+		auto interfaceEndIt=connections.primaryModuleInterfaceUnits.end();
+		for(const auto&[filepath,mc]:connections.files)
+		{
+			ForwardGraphNode current{filepath.string(),false,false};
+			auto[itToCurrent,succ]=graph.insert({current,{mc.dependency.size(),{}}});
+			if(!succ)
+			{
+				itToCurrent->second.first=mc.dependency.size();
+			}
+			for(const auto&i:mc.dependency)
+			{
+				auto interfaceIt=connections.primaryModuleInterfaceUnits.find(i.name);
+				auto it=graph.insert({{interfaceIt==interfaceEndIt?i.name:interfaceIt->second.string(),i.type!=MODULE,interfaceIt==interfaceEndIt},{}}).first;
+				it->second.second.push_back(current);
+			}
+		}
+		for(const auto&[node,edges]:graph)
+		{
+			println("{} {} {}",node.name,edges.first,views::transform(edges.second,&ForwardGraphNode::name));
 		}
 		ranges::for_each(connections.files,bind_front(&ProgramBuilder::build_file,this));
 		pm.wait_remaining_processes();
