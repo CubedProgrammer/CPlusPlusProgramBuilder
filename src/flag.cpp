@@ -3,9 +3,22 @@ import std;
 import configuration;
 import utils;
 using namespace std;
+using namespace literals;
+using filesystem::path;
 constexpr string_view source="int main(int,char**){return 0;}";
 constexpr string_view programPath="/tmp/C++ProgramBuilderBasicProgram.c++";
+constexpr string_view CBP_GCC_MODULE_FLAG="-fmodules";
+constexpr string_view CBP_CLANG_MODULE_PATH="-fprebuilt-module-path=.";
+constexpr string_view CBP_COMPILE_FLAG="-c";
+constexpr string_view CBP_OUTPUT_FLAG="-o";
+constexpr string_view CBP_LANGUAGE_FLAG="-x";
+constexpr string_view CBP_MODULE_LANGUAGE="c++-module";
+constexpr string_view CBP_LANGUAGE_VERSION="-std=c++20";
 constexpr string_view CBP_STDLIB_FLAG="-stdlib=libc++";
+char*svConstCaster(string_view sv)
+{
+	return const_cast<char*>(sv.data());
+}
 export enum CompilerType
 {
 	LLVM,GNU
@@ -55,5 +68,115 @@ export pair<CompilerType,vector<string>>getCompilerInformation(const BuildConfig
 	args.push_back(outputFlag.data());
 	args.push_back(outputFile.data());
 	args.push_back(nullptr);
-	return{type,{}};
+	data=run_and_get_output(args);
+	vector<string>directories;
+	if(data)
+	{
+		if(data->second==0)
+		{
+			bool insert=false;
+			for(auto sr:views::split(data->first,"\n"sv))
+			{
+				string_view sv{sr};
+				if(sv=="End of search list.")
+				{
+					insert=false;
+				}
+				if(insert)
+				{
+					directories.push_back(string{sv.substr(1)});
+				}
+				if(sv=="#include <...> search starts here:")
+				{
+					insert=true;
+				}
+			}
+		}
+		else
+		{
+			println(cerr,"Executing {} with arguments {} failed with exit code {}.",configuration.compiler,args,data->second);
+		}
+	}
+	return{type,std::move(directories)};
 }
+export class CompilerConfigurer
+{
+	CompilerType type;
+	vector<string>includeDirectories;
+	vector<char*>compilerArguments;
+public:
+	CompilerConfigurer(CompilerType ct,vector<string>id)
+		noexcept
+		:type(ct),includeDirectories(std::move(id)),compilerArguments()
+	{}
+	CompilerConfigurer()
+		noexcept
+		:CompilerConfigurer(LLVM,{})
+	{}
+	span<const string>getIncludeDirectories()
+		const noexcept
+	{
+		return includeDirectories;
+	}
+	string moduleNameToFile(string_view name)
+		const
+	{
+		string file{name};
+		for(char&c:views::filter(file,bind_front(equal_to<char>(),':')))
+		{
+			c='-';
+		}
+		if(name.size())
+		{
+			file+=type==GNU?".gcm":".pcm";
+		}
+		return file;
+	}
+	void addArguments(const BuildConfiguration&configuration)
+	{
+		const char*flagData=CBP_CLANG_MODULE_PATH.data();
+		string clangPrebuiltModuleFlag;
+		compilerArguments.push_back(const_cast<char*>(configuration.compiler.data()));
+		bool addLanguageVersion=ranges::find_if(configuration.compilerOptions,[](string_view sv){return sv.starts_with("-std=");})==configuration.compilerOptions.end();
+		if(addLanguageVersion)
+		{
+			compilerArguments.push_back(const_cast<char*>(CBP_LANGUAGE_VERSION.data()));
+		}
+		if(configuration.objectDirectory.size()&&type==GNU)
+		{
+			path cmcache("gcm.cache");
+			path target{configuration.objectDirectory};
+			if(!exists(cmcache))
+			{
+				create_directory_symlink(target,cmcache);
+			}
+			else if(is_symlink(cmcache))
+			{
+				if(read_symlink(cmcache)!=target)
+				{
+					remove(cmcache);
+					create_directory_symlink(target,cmcache);
+				}
+			}
+		}
+		switch(type)
+		{
+			case LLVM:
+				if(configuration.objectDirectory.size())
+				{
+					clangPrebuiltModuleFlag=string{CBP_CLANG_MODULE_PATH.data(),CBP_CLANG_MODULE_PATH.size()-1};
+					clangPrebuiltModuleFlag.append_range(configuration.objectDirectory);
+					flagData=clangPrebuiltModuleFlag.data();
+				}
+				compilerArguments.push_back(const_cast<char*>(CBP_STDLIB_FLAG.data()));
+				compilerArguments.push_back(const_cast<char*>(flagData));
+				compilerArguments.push_back(const_cast<char*>(CBP_LANGUAGE_FLAG.data()));
+				compilerArguments.push_back(const_cast<char*>(CBP_MODULE_LANGUAGE.data()));
+				break;
+			case GNU:
+				compilerArguments.push_back(const_cast<char*>(CBP_GCC_MODULE_FLAG.data()));
+				break;
+		}
+		compilerArguments.append_range(views::transform(configuration.compilerOptions,svConstCaster));
+	}
+};
