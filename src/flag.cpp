@@ -104,10 +104,12 @@ export class CompilerConfigurer
 	CompilerType type;
 	vector<string>includeDirectories;
 	vector<char*>compilerArguments;
+	string clangPrebuiltModuleFlag;
+	string clangModulePath;
 public:
 	CompilerConfigurer(CompilerType ct,vector<string>id)
 		noexcept
-		:type(ct),includeDirectories(std::move(id)),compilerArguments()
+		:type(ct),includeDirectories(std::move(id)),compilerArguments(),clangPrebuiltModuleFlag()
 	{}
 	CompilerConfigurer()
 		noexcept
@@ -164,7 +166,6 @@ public:
 	void addArguments(const BuildConfiguration&configuration)
 	{
 		const char*flagData=CBP_CLANG_MODULE_PATH.data();
-		string clangPrebuiltModuleFlag;
 		compilerArguments.push_back(const_cast<char*>(configuration.compiler.data()));
 		bool addLanguageVersion=ranges::find_if(configuration.compilerOptions,[](string_view sv){return sv.starts_with("-std=");})==configuration.compilerOptions.end();
 		if(addLanguageVersion)
@@ -199,13 +200,46 @@ public:
 				}
 				compilerArguments.push_back(const_cast<char*>(CBP_STDLIB_FLAG.data()));
 				compilerArguments.push_back(const_cast<char*>(flagData));
-				compilerArguments.push_back(const_cast<char*>(CBP_LANGUAGE_FLAG.data()));
-				compilerArguments.push_back(const_cast<char*>(CBP_MODULE_LANGUAGE.data()));
 				break;
 			case GNU:
 				compilerArguments.push_back(const_cast<char*>(CBP_GCC_MODULE_FLAG.data()));
 				break;
 		}
 		compilerArguments.append_range(views::transform(configuration.compilerOptions,svConstCaster));
+	}
+	vector<char*>compileFile(string&filename,string&outputname,const string&moduleName,const BuildConfiguration&configuration,bool notInterface,bool isHeader)
+	{
+		vector<char*>output=compilerArguments;
+		if(type==LLVM&&!notInterface)
+		{
+			output.push_back(const_cast<char*>(CBP_LANGUAGE_FLAG.data()));
+			output.push_back(const_cast<char*>(CBP_MODULE_LANGUAGE.data()));
+		}
+		output.push_back(filename.data());
+		output.push_back(const_cast<char*>(CBP_COMPILE_FLAG.data()));
+		output.push_back(const_cast<char*>(CBP_OUTPUT_FLAG.data()));
+		output.push_back(outputname.data());
+		if(type==LLVM&&!notInterface)
+		{
+			clangModulePath="-fmodule-output=";
+			clangModulePath+=moduleNameToFile(moduleName,configuration.objectDirectory);
+			output.push_back(clangModulePath.data());
+		}
+		output.push_back(nullptr);
+		return output;
+	}
+	vector<char*>linkProgram(string&artifact,BuildConfiguration&configuration,span<string>files)
+	{
+		vector<char*>trueLinkerArguments{const_cast<char*>(configuration.compiler.data())};
+		if(type==LLVM)
+		{
+			trueLinkerArguments.push_back(svConstCaster(CBP_STDLIB_FLAG));
+		}
+		trueLinkerArguments.append_range(views::transform(files,[](string&s){return s.data();}));
+		trueLinkerArguments.append_range(views::transform(configuration.linkerOptions,svConstCaster));
+		trueLinkerArguments.push_back(svConstCaster(CBP_OUTPUT_FLAG));
+		trueLinkerArguments.push_back(artifact.data());
+		trueLinkerArguments.push_back(nullptr);
+		return trueLinkerArguments;
 	}
 };

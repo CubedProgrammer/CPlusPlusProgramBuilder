@@ -30,6 +30,7 @@ export struct ModuleConnection
 export struct ForwardGraphNode
 {
 	string name;
+	bool notInterface;
 	bool header;
 	bool external;
 	constexpr bool operator==(const ForwardGraphNode&)const noexcept=default;
@@ -70,7 +71,7 @@ class ProgramBuilder
 public:
 	ProgramBuilder(ProgramBuilderConstructorTag,string_view name,pair<CompilerType,vector<string>>tai,BuildConfiguration op)
 		noexcept
-		:name(name),options(std::move(op)),linkerArguments(),internal(),graph(),flagger(tai.first,std::move(tai.second)),pm()
+		:name(name),options(std::move(op)),linkerArguments(),internal(),graph(),flagger(tai.first,std::move(tai.second)),pm(op.threadCount)
 	{}
 	ProgramBuilder()=delete;
 	ProgramBuilder(const ProgramBuilder&)=delete;
@@ -156,9 +157,7 @@ public:
 	void cpbuild()
 	{
 		span<string_view>targets=options.targets;
-		//CompilerType ct=typeAndInclude.first;
 		flagger.addArguments(options);
-		linkerArguments.push_back(string{options.compiler});
 		for(path t:targets)
 		{
 			if(is_directory(t))
@@ -187,16 +186,13 @@ public:
 		auto interfaceEndIt=internal.primaryModuleInterfaceUnits.end();
 		for(const auto&[filepath,mc]:internal.files)
 		{
-			ForwardGraphNode current{filepath.string(),false,false};
-			auto[itToCurrent,succ]=graph.insert({current,{{},static_cast<uint16_t>(mc.dependency.size()),mc.source>mc.object}});
+			ForwardGraphNode current{filepath.string(),mc.name.size()==0,false,false};
+			bool toCompile=options.isForceRecompile()||mc.source>mc.object;
+			auto[itToCurrent,succ]=graph.insert({current,{{},static_cast<uint16_t>(mc.dependency.size()),toCompile}});
 			if(!succ)
 			{
 				itToCurrent->second.remaining=mc.dependency.size();
-				itToCurrent->second.recompile=mc.source>mc.object;
-			}
-			if(itToCurrent->second.recompile)
-			{
-				println("recompile {} {} {} {}",filepath.string(),mc.output.string(),mc.source,mc.object);
+				itToCurrent->second.recompile=toCompile;
 			}
 			for(const auto&i:mc.dependency)
 			{
@@ -218,7 +214,7 @@ public:
 				}
 				if(name)
 				{
-					auto it=graph.insert({{*name,i.type!=MODULE,isExternal},{}}).first;
+					auto it=graph.insert({{*name,false,i.type!=MODULE,isExternal},{}}).first;
 					it->second.dependent.push_back(current);
 				}
 			}
@@ -228,13 +224,14 @@ public:
 			path importPath=std::move(externalImports.front());
 			externalImports.pop();
 			println("externally importing {}",importPath.string());
-			ForwardGraphNode current{importPath.string(),false,true};
+			ForwardGraphNode current{importPath.string(),false,false,true};
 			const ModuleCompilation&mc=external.files.at(importPath);
-			auto[itToCurrent,succ]=graph.insert({current,{{},static_cast<uint16_t>(mc.dependency.size()),mc.source>mc.object}});
+			bool toCompile=options.isForceRecompileEnhanced()||mc.source>mc.object;
+			auto[itToCurrent,succ]=graph.insert({current,{{},static_cast<uint16_t>(mc.dependency.size()),toCompile}});
 			if(!succ)
 			{
 				itToCurrent->second.remaining=mc.dependency.size();
-				itToCurrent->second.recompile=mc.source>mc.object;
+				itToCurrent->second.recompile=toCompile;
 			}
 			for(const auto&i:mc.dependency)
 			{
@@ -245,7 +242,7 @@ public:
 					path name=externalIt->second;
 					println("{} is {}",i.name,name.string());
 					externalImports.push(name);
-					auto it=graph.insert({{name.string(),i.type!=MODULE,true},{}}).first;
+					auto it=graph.insert({{name.string(),false,i.type!=MODULE,true},{}}).first;
 					it->second.dependent.push_back(current);
 				}
 			}
@@ -257,20 +254,28 @@ public:
 			{
 				compileQueue.push(node);
 			}
-			println("{} {} {} {}",node.name,edges.remaining,edges.recompile,views::transform(edges.dependent,&ForwardGraphNode::name));
+			println("{} {} {} {} {}",node.name,node.notInterface,edges.remaining,edges.recompile,views::transform(edges.dependent,&ForwardGraphNode::name));
 		}
 		while(compileQueue.size())
 		{
 			ForwardGraphNode node=std::move(compileQueue.front());
 			compileQueue.pop();
 			const ForwardGraphNodeData&data=graph.at(node);
+			const ModuleCompilation&mc=node.external?external.files.at(path{node.name}):internal.files.at(path{node.name});
 			if(data.recompile)
 			{
 				println("Compiling {}",node.name);
+				string outputfile=node.external?"/dev/null":mc.output.string();
+				auto arguments=flagger.compileFile(node.name,outputfile,mc.name,options,node.notInterface,node.header);
+				pm.run(arguments,options.isDisplayCommand());
 			}
 			else
 			{
 				println("{} does not need to be recompiled",node.name);
+			}
+			if(!node.external)
+			{
+				linkerArguments.push_back(mc.output.string());
 			}
 			for(const auto&other:data.dependent)
 			{
@@ -283,14 +288,9 @@ public:
 			}
 		}
 		pm.wait_remaining_processes();
-		const path product=getFinalOutputFile();
-		//linkerArguments.push_back(string{CBP_OUTPUT_FLAG});
-		linkerArguments.push_back(product.string());
-		auto trueLinkerArguments=ranges::to<vector<char*>>(views::transform(linkerArguments,[](string&s){return s.data();}));
-		//trueLinkerArguments.append_range(views::transform(options.linkerOptions,svConstCaster));
-		trueLinkerArguments.push_back(nullptr);
-		//pm.run(trueLinkerArguments,options.displayCommand);
-		//pm.wait_remaining_processes();
+		string product=getFinalOutputFile().string();
+		auto arguments=flagger.linkProgram(product,options,linkerArguments);
+		pm.run(arguments,options.isDisplayCommand());
 	}
 	~ProgramBuilder()=default;
 	static ProgramBuilder&getInstance(string_view program,pair<CompilerType,vector<string>>tai,BuildConfiguration options)

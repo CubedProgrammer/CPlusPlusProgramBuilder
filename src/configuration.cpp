@@ -7,6 +7,7 @@ constexpr char OUTPUT_OPTION_FLAG='o';
 constexpr char DISPLAY_OPTION_FLAG='s';
 constexpr char FORCE_OPTION_FLAG='f';
 constexpr char ARTIFACT_OPTION_FLAG='a';
+constexpr char PARALLEL_OPTION_FLAG='j';
 constexpr char LONG_OPTION_FLAG='-';
 export constexpr string_view CBP_COMPILER_NAME="c++";
 export struct BuildConfiguration
@@ -16,12 +17,42 @@ export struct BuildConfiguration
 	string_view artifact;
 	span<string_view>compilerOptions;
 	span<string_view>linkerOptions;
-	bool displayCommand;
-	bool forceCompile;
+	uint8_t binaryOptions;
+	uint8_t threadCount;
 	vector<string_view>targets;
 	BuildConfiguration()
-		:compiler(CBP_COMPILER_NAME),objectDirectory(),artifact(),compilerOptions(),linkerOptions(),displayCommand(),forceCompile(),targets()
+		:compiler(CBP_COMPILER_NAME),objectDirectory(),artifact(),compilerOptions(),linkerOptions(),binaryOptions(),threadCount(1),targets()
 	{}
+	bool isDisplayCommand()
+		const noexcept
+	{
+		return(binaryOptions&1)==1;
+	}
+	bool isForceRecompile()
+		const noexcept
+	{
+		return(binaryOptions>>1&1)==1;
+	}
+	bool isForceRecompileEnhanced()
+		const noexcept
+	{
+		return(binaryOptions>>2&1)==1;
+	}
+	void setDisplayCommand()
+		noexcept
+	{
+		binaryOptions|=1;
+	}
+	void setForceRecompile()
+		noexcept
+	{
+		binaryOptions|=2;
+	}
+	void setForceRecompileEnhanced()
+		noexcept
+	{
+		binaryOptions|=4;
+	}
 };
 export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 {
@@ -62,14 +93,29 @@ export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 					consume=1;
 					break;
 				case DISPLAY_OPTION_FLAG:
-					configuration.displayCommand=true;
+					configuration.setDisplayCommand();
 					break;
 				case FORCE_OPTION_FLAG:
-					configuration.forceCompile=true;
+					if(configuration.isForceRecompile())
+					{
+						configuration.setForceRecompileEnhanced();
+					}
+					else
+					{
+						configuration.setForceRecompile();
+					}
 					break;
 				case ARTIFACT_OPTION_FLAG:
 					consumeInto=&configuration.artifact;
 					consume=1;
+					break;
+				case PARALLEL_OPTION_FLAG:
+					if(sv.size()>2)
+					{
+						uint8_t v=1;
+						from_chars(sv.data()+2,sv.data()+sv.size(),v);
+						configuration.threadCount=v;
+					}
 					break;
 				case LONG_OPTION_FLAG:
 					if(sv.substr(2)=="compiler")

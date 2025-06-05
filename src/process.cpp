@@ -12,10 +12,6 @@ public:
 		noexcept
 		:maximum(m),needToWait(false),processes()
 	{}
-	ParallelProcessManager()
-		noexcept
-		:ParallelProcessManager(1)
-	{}
 	optional<unsigned>run(span<char*>args,bool printCommand)
 	{
 		if(needToWait)
