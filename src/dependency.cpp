@@ -2,6 +2,7 @@ export module dependency;
 import std;
 using namespace std;
 using std::filesystem::path;
+bool first=true;
 export enum ImportType
 {
 	MODULE,SYS_HEADER,LOCAL_HEADER
@@ -64,13 +65,16 @@ vector<string>tokenizeData(const path&file)
 		}
 		else if(c=='\''||c=='"')
 		{
-			insert=false;
-			stringOrCharPointer=c=='\''?&inChar:&inString;
-			if(((stringOrCharPointer==&inChar&&!inString)||(stringOrCharPointer==&inString&&!inChar))&&!lastEscape)
+			if(!inComment)
 			{
-				*stringOrCharPointer=!*stringOrCharPointer;
-				insert=*stringOrCharPointer;
-				isQuoted=!insert;
+				insert=false;
+				stringOrCharPointer=c=='\''?&inChar:&inString;
+				if(((stringOrCharPointer==&inChar&&!inString)||(stringOrCharPointer==&inString&&!inChar))&&!lastEscape)
+				{
+					*stringOrCharPointer=!*stringOrCharPointer;
+					insert=*stringOrCharPointer;
+					isQuoted=!insert;
+				}
 			}
 		}
 		else if(!isspace((unsigned char)c))
@@ -122,6 +126,14 @@ vector<string>tokenizeData(const path&file)
 	if(current.size())
 	{
 		tokens.push_back(std::move(current));
+	}
+	if(first)
+	{
+		for(const string&s:tokens)
+		{
+			println("{}",s);
+		}
+		first=false;
 	}
 	return tokens;
 }
@@ -200,6 +212,10 @@ export ModuleData parseModuleData(const path&file)
 				importStatement.clear();
 				importing=false;
 			}
+			if(grabName&&!md.name.empty())
+			{
+				md.name.pop_back();
+			}
 			grabName=false;
 		}
 		if(s=="export")
@@ -210,10 +226,6 @@ export ModuleData parseModuleData(const path&file)
 		{
 			importing=true;
 		}
-	}
-	if(!md.name.empty())
-	{
-		md.name.pop_back();
 	}
 	return md;
 }

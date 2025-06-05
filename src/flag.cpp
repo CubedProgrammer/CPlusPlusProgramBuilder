@@ -94,7 +94,7 @@ export pair<CompilerType,vector<string>>getCompilerInformation(const BuildConfig
 		}
 		else
 		{
-			println(cerr,"Executing {} with arguments {} failed with exit code {}.",configuration.compiler,args,data->second);
+			println(cerr,"Executing {} with arguments {} failed with exit code {}.",configuration.compiler,views::take(args,args.size()-1),data->second);
 		}
 	}
 	return{type,std::move(directories)};
@@ -118,7 +118,29 @@ public:
 	{
 		return includeDirectories;
 	}
-	string moduleNameToFile(string_view name)
+	string getEitherSTDModulePath(string name)
+		const
+	{
+		if(type==GNU)
+		{
+			return includeDirectories.front()+"/bits/"+name+".cc";
+		}
+		else
+		{
+			string first="/usr/local/share/libc++/v1/"+name+".cppm";
+			string second="/usr/share/libc++/v1/"+name+".cppm";
+			return exists(path{first})?first:second;
+		}
+	}
+	string getSTDModulePath()
+	{
+		return getEitherSTDModulePath("std");
+	}
+	string getSTDCompatModulePath()
+	{
+		return getEitherSTDModulePath("std.compat");
+	}
+	string moduleNameToFile(string_view name,string_view outputDirectory)
 		const
 	{
 		string file{name};
@@ -129,6 +151,13 @@ public:
 		if(name.size())
 		{
 			file+=type==GNU?".gcm":".pcm";
+			if(outputDirectory.size())
+			{
+				string temp{outputDirectory};
+				temp+='/';
+				temp+=file;
+				file=std::move(temp);
+			}
 		}
 		return file;
 	}
