@@ -119,9 +119,6 @@ public:
 			return path{options.artifact};
 		}
 	}
-	void build_file(FileModuleMap::reference data)
-	{
-	}
 	void add_file(path&&p,bool externalDirectory=false)
 	{
 		ModuleData data=parseModuleData(p);
@@ -253,14 +250,38 @@ public:
 				}
 			}
 		}
+		queue<ForwardGraphNode>compileQueue;
 		for(const auto&[node,edges]:graph)
 		{
-			if(node.external)
+			if(edges.remaining==0)
 			{
+				compileQueue.push(node);
 			}
 			println("{} {} {} {}",node.name,edges.remaining,edges.recompile,views::transform(edges.dependent,&ForwardGraphNode::name));
 		}
-		ranges::for_each(internal.files,bind_front(&ProgramBuilder::build_file,this));
+		while(compileQueue.size())
+		{
+			ForwardGraphNode node=std::move(compileQueue.front());
+			compileQueue.pop();
+			const ForwardGraphNodeData&data=graph.at(node);
+			if(data.recompile)
+			{
+				println("Compiling {}",node.name);
+			}
+			else
+			{
+				println("{} does not need to be recompiled",node.name);
+			}
+			for(const auto&other:data.dependent)
+			{
+				ForwardGraphNodeData&otherData=graph.at(other);
+				otherData.recompile=otherData.recompile||data.recompile;
+				if(--otherData.remaining==0)
+				{
+					compileQueue.push(other);
+				}
+			}
+		}
 		pm.wait_remaining_processes();
 		const path product=getFinalOutputFile();
 		//linkerArguments.push_back(string{CBP_OUTPUT_FLAG});

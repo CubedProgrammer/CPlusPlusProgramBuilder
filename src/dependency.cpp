@@ -2,7 +2,7 @@ export module dependency;
 import std;
 using namespace std;
 using std::filesystem::path;
-bool first=true;
+//bool first=true;
 export enum ImportType
 {
 	MODULE,SYS_HEADER,LOCAL_HEADER
@@ -29,6 +29,7 @@ vector<string>tokenizeData(const path&file)
 	bool symbol=false;
 	bool insert=false;
 	bool inComment=false;
+	bool inLineComment=false;
 	bool isQuoted=false;
 	bool inAngleBracket=false;
 	bool*stringOrCharPointer=nullptr;
@@ -36,7 +37,7 @@ vector<string>tokenizeData(const path&file)
 	char c;
 	while(fin.get(c))
 	{
-		insert=!inChar&&!inString&&!inComment&&!inAngleBracket;
+		insert=!inChar&&!inString&&!inComment&&!inAngleBracket&&!inLineComment;
 		if(c=='_'||isalnum((unsigned char)c))
 		{
 			insert=(insert&&symbol)||isQuoted;
@@ -54,6 +55,11 @@ vector<string>tokenizeData(const path&file)
 				inAngleBracket=false;
 				isQuoted=true;
 			}
+			else
+			{
+				insert=(insert&&!symbol)||isQuoted;
+				symbol=true;
+			}
 		}
 		else if(c=='<')
 		{
@@ -62,10 +68,15 @@ vector<string>tokenizeData(const path&file)
 				inAngleBracket=true;
 				insert=true;
 			}
+			else
+			{
+				insert=(insert&&!symbol)||isQuoted;
+				symbol=true;
+			}
 		}
 		else if(c=='\''||c=='"')
 		{
-			if(!inComment)
+			if(!inLineComment&&!inComment)
 			{
 				insert=false;
 				stringOrCharPointer=c=='\''?&inChar:&inString;
@@ -96,6 +107,10 @@ vector<string>tokenizeData(const path&file)
 					insert=true;
 					inComment=true;
 				}
+				else if(current.find("//")==current.size()-2)
+				{
+					inLineComment=true;
+				}
 			}
 			else if(current.size()>=1)
 			{
@@ -104,6 +119,11 @@ vector<string>tokenizeData(const path&file)
 		}
 		lastEscape=escaped;
 		escaped=false;
+		if(c=='\n')
+		{
+			insert=inLineComment;
+			inLineComment=false;
+		}
 		if(insert&&current.size())
 		{
 			tokens.push_back(std::move(current));
@@ -127,14 +147,14 @@ vector<string>tokenizeData(const path&file)
 	{
 		tokens.push_back(std::move(current));
 	}
-	if(first)
+	/*if(first)
 	{
 		for(const string&s:tokens)
 		{
 			println("{}",s);
 		}
 		first=false;
-	}
+	}*/
 	return tokens;
 }
 export ModuleData parseModuleData(const path&file)
