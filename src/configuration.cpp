@@ -1,13 +1,13 @@
 export module configuration;
 import std;
 using namespace std;
-constexpr char COMPILER_OPTION_FLAG='c';
-constexpr char LINKER_OPTION_FLAG='l';
-constexpr char OUTPUT_OPTION_FLAG='o';
-constexpr char DISPLAY_OPTION_FLAG='s';
-constexpr char FORCE_OPTION_FLAG='f';
-constexpr char ARTIFACT_OPTION_FLAG='a';
-constexpr char PARALLEL_OPTION_FLAG='j';
+export constexpr char COMPILER_OPTION_FLAG='c';
+export constexpr char LINKER_OPTION_FLAG='l';
+export constexpr char OUTPUT_OPTION_FLAG='o';
+export constexpr char DISPLAY_OPTION_FLAG='s';
+export constexpr char FORCE_OPTION_FLAG='f';
+export constexpr char ARTIFACT_OPTION_FLAG='a';
+export constexpr char PARALLEL_OPTION_FLAG='j';
 constexpr char LONG_OPTION_FLAG='-';
 export constexpr string_view CBP_COMPILER_NAME="c++";
 export struct BuildConfiguration
@@ -38,6 +38,16 @@ export struct BuildConfiguration
 	{
 		return(binaryOptions>>2&1)==1;
 	}
+	bool isHelp()
+		const noexcept
+	{
+		return(binaryOptions>>3&1)==1;
+	}
+	bool isVersion()
+		const noexcept
+	{
+		return(binaryOptions>>4&1)==1;
+	}
 	void setDisplayCommand()
 		noexcept
 	{
@@ -52,6 +62,16 @@ export struct BuildConfiguration
 		noexcept
 	{
 		binaryOptions|=4;
+	}
+	void setHelp()
+		noexcept
+	{
+		binaryOptions|=8;
+	}
+	void setVersion()
+		noexcept
+	{
+		binaryOptions|=16;
 	}
 };
 export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
@@ -122,6 +142,14 @@ export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 					{
 						consumeInto=&configuration.compiler;
 						consume=1;
+					}
+					else if(sv.substr(2)=="help")
+					{
+						configuration.setHelp();
+					}
+					else if(sv.substr(2)=="version")
+					{
+						configuration.setVersion();
 					}
 					break;
 				default:
