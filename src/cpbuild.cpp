@@ -124,7 +124,6 @@ public:
 	{
 		ModuleData data=parseModuleData(p);
 		const path object=externalDirectory?path{flagger.moduleNameToFile(data.name,options.objectDirectory)}:getOutputFile(p);
-		println("adding file {} {} {}",data.name,externalDirectory,object.string());
 		if(!object.empty())
 		{
 			ModuleConnection&connection=externalDirectory?external:internal;
@@ -256,34 +255,64 @@ public:
 			}
 			println("{} {} {} {} {}",node.name,node.notInterface,edges.remaining,edges.recompile,views::transform(edges.dependent,&ForwardGraphNode::name));
 		}
-		while(compileQueue.size())
+		unordered_map<unsigned,ForwardGraphNode>processToNode;
+		while(!pm.is_empty()||compileQueue.size())
 		{
-			ForwardGraphNode node=std::move(compileQueue.front());
-			compileQueue.pop();
-			const ForwardGraphNodeData&data=graph.at(node);
-			const ModuleCompilation&mc=node.external?external.files.at(path{node.name}):internal.files.at(path{node.name});
-			if(data.recompile)
+			if(!pm.is_full()&&compileQueue.size())
 			{
-				println("Compiling {}",node.name);
-				string outputfile=node.external?"/dev/null":mc.output.string();
-				auto arguments=flagger.compileFile(node.name,outputfile,mc.name,options,node.notInterface,node.header);
-				pm.run(arguments,options.isDisplayCommand());
+				ForwardGraphNode node=std::move(compileQueue.front());
+				compileQueue.pop();
+				const ForwardGraphNodeData&data=graph.at(node);
+				const ModuleCompilation&mc=node.external?external.files.at(path{node.name}):internal.files.at(path{node.name});
+				if(!node.external)
+				{
+					linkerArguments.push_back(mc.output.string());
+				}
+				if(data.recompile)
+				{
+					println("Compiling {}",node.name);
+					string outputfile=node.external?"/dev/null":mc.output.string();
+					auto arguments=flagger.compileFile(node.name,outputfile,mc.name,options,node.notInterface,node.header);
+					auto opid=pm.run(arguments,options.isDisplayCommand());
+					if(opid)
+					{
+						processToNode.insert({*opid,std::move(node)});
+					}
+					else
+					{
+						println("Compiling {} failed",node.name);
+					}
+				}
+				else
+				{
+					println("{} does not need to be recompiled",node.name);
+				}
+				for(const auto&other:data.dependent)
+				{
+					ForwardGraphNodeData&otherData=graph.at(other);
+					otherData.recompile=otherData.recompile||data.recompile;
+					otherData.remaining-=!data.recompile;
+					if(otherData.remaining==0)
+					{
+						compileQueue.push(other);
+					}
+				}
 			}
 			else
 			{
-				println("{} does not need to be recompiled",node.name);
-			}
-			if(!node.external)
-			{
-				linkerArguments.push_back(mc.output.string());
-			}
-			for(const auto&other:data.dependent)
-			{
-				ForwardGraphNodeData&otherData=graph.at(other);
-				otherData.recompile=otherData.recompile||data.recompile;
-				if(--otherData.remaining==0)
+				auto opid=pm.wait_any_process();
+				if(opid)
 				{
-					compileQueue.push(other);
+					const ForwardGraphNode&node=processToNode.at(*opid);
+					const ForwardGraphNodeData&data=graph.at(node);
+					for(const auto&other:data.dependent)
+					{
+						ForwardGraphNodeData&otherData=graph.at(other);
+						if(--otherData.remaining==0)
+						{
+							compileQueue.push(other);
+						}
+					}
 				}
 			}
 		}
@@ -291,6 +320,7 @@ public:
 		string product=getFinalOutputFile().string();
 		auto arguments=flagger.linkProgram(product,options,linkerArguments);
 		pm.run(arguments,options.isDisplayCommand());
+		pm.wait_remaining_processes();
 	}
 	~ProgramBuilder()=default;
 	static ProgramBuilder&getInstance(string_view program,pair<CompilerType,vector<string>>tai,BuildConfiguration options)

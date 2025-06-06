@@ -55,6 +55,25 @@ public:
 		}
 		return oid;
 	}
+	optional<unsigned>wait_any_process()
+	{
+		optional<unsigned>opid;
+		bool keepWaiting=true;
+		auto processAndResult=wait();
+		while(keepWaiting&&processAndResult)
+		{
+			if(processes.erase((unsigned)processAndResult->first))
+			{
+				opid=(unsigned)processAndResult->first;
+				needToWait=keepWaiting=false;
+			}
+			else
+			{
+				processAndResult=wait();
+			}
+		}
+		return opid;
+	}
 	void wait_all_processes(span<unsigned>idArray)
 		noexcept
 	{
@@ -79,6 +98,11 @@ public:
 			}
 		}
 		needToWait=false;
+	}
+	constexpr bool is_empty()
+		const noexcept
+	{
+		return processes.size()==0;
 	}
 	constexpr bool is_full()
 		const noexcept
