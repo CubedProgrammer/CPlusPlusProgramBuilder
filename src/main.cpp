@@ -28,6 +28,7 @@ int mainpp(span<string_view>args)
 			println("-{}: Compile files that have not changed, specify twice to compile external module interface units that have not changed.",FORCE_OPTION_FLAG);
 			println("-{} FILE: Specify the path to the artifact, the final product of compilation.",ARTIFACT_OPTION_FLAG);
 			println("-{}{{N}}: Specifies that N processess allowed to run in parallel, set this to the number of threads on this computer for maximum performance.",PARALLEL_OPTION_FLAG);
+			println("-{} FILE: Read options from this file, the file must have one option per line.",FILE_OPTION_FLAG);
 			println("--compiler FILE: Specifies the path to the compiler to use.");
 		}
 	}

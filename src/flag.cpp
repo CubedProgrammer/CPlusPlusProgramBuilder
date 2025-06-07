@@ -34,7 +34,7 @@ export pair<CompilerType,vector<string>>getCompilerInformation(const BuildConfig
 	string verboseFlag="-v";
 	string outputFlag="-o";
 	string outputFile="/dev/null";
-	args.push_back(const_cast<char*>(configuration.compiler.data()));
+	args.push_back(const_cast<char*>(configuration.compiler().data()));
 	args.push_back(versionFlag.data());
 	args.push_back(nullptr);
 	CompilerType type=LLVM;
@@ -51,7 +51,7 @@ export pair<CompilerType,vector<string>>getCompilerInformation(const BuildConfig
 		}
 		else
 		{
-			println(cerr,"Executing {} failed with exit code {}.",configuration.compiler,data->second);
+			println(cerr,"Executing {} failed with exit code {}.",configuration.compiler(),data->second);
 		}
 	}
 	args.erase(args.begin()+1,args.end());
@@ -94,7 +94,7 @@ export pair<CompilerType,vector<string>>getCompilerInformation(const BuildConfig
 		}
 		else
 		{
-			println(cerr,"Executing {} with arguments {} failed with exit code {}.",configuration.compiler,views::take(args,args.size()-1),data->second);
+			println(cerr,"Executing {} with arguments {} failed with exit code {}.",configuration.compiler(),views::take(args,args.size()-1),data->second);
 		}
 	}
 	return{type,std::move(directories)};
@@ -166,16 +166,16 @@ public:
 	void addArguments(const BuildConfiguration&configuration)
 	{
 		const char*flagData=CBP_CLANG_MODULE_PATH.data();
-		compilerArguments.push_back(const_cast<char*>(configuration.compiler.data()));
+		compilerArguments.push_back(const_cast<char*>(configuration.compiler().data()));
 		bool addLanguageVersion=ranges::find_if(configuration.compilerOptions,[](string_view sv){return sv.starts_with("-std=");})==configuration.compilerOptions.end();
 		if(addLanguageVersion)
 		{
 			compilerArguments.push_back(const_cast<char*>(CBP_LANGUAGE_VERSION.data()));
 		}
-		if(configuration.objectDirectory.size()&&type==GNU)
+		if(configuration.objectDirectory().size()&&type==GNU)
 		{
 			path cmcache("gcm.cache");
-			path target{configuration.objectDirectory};
+			path target{configuration.objectDirectory()};
 			if(!exists(cmcache))
 			{
 				create_directory_symlink(target,cmcache);
@@ -192,10 +192,10 @@ public:
 		switch(type)
 		{
 			case LLVM:
-				if(configuration.objectDirectory.size())
+				if(configuration.objectDirectory().size())
 				{
 					clangPrebuiltModuleFlag=string{CBP_CLANG_MODULE_PATH.data(),CBP_CLANG_MODULE_PATH.size()-1};
-					clangPrebuiltModuleFlag.append_range(configuration.objectDirectory);
+					clangPrebuiltModuleFlag.append_range(configuration.objectDirectory());
 					flagData=clangPrebuiltModuleFlag.data();
 				}
 				compilerArguments.push_back(const_cast<char*>(CBP_STDLIB_FLAG.data()));
@@ -222,7 +222,7 @@ public:
 		if(type==LLVM&&!notInterface)
 		{
 			clangModulePath="-fmodule-output=";
-			clangModulePath+=moduleNameToFile(moduleName,configuration.objectDirectory);
+			clangModulePath+=moduleNameToFile(moduleName,configuration.objectDirectory());
 			output.push_back(clangModulePath.data());
 		}
 		output.push_back(nullptr);
@@ -230,7 +230,7 @@ public:
 	}
 	vector<char*>linkProgram(string&artifact,BuildConfiguration&configuration,span<string>files)
 	{
-		vector<char*>trueLinkerArguments{const_cast<char*>(configuration.compiler.data())};
+		vector<char*>trueLinkerArguments{const_cast<char*>(configuration.compiler().data())};
 		if(type==LLVM)
 		{
 			trueLinkerArguments.push_back(svConstCaster(CBP_STDLIB_FLAG));

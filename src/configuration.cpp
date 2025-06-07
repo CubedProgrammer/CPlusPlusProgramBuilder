@@ -8,20 +8,20 @@ export constexpr char DISPLAY_OPTION_FLAG='s';
 export constexpr char FORCE_OPTION_FLAG='f';
 export constexpr char ARTIFACT_OPTION_FLAG='a';
 export constexpr char PARALLEL_OPTION_FLAG='j';
+export constexpr char FILE_OPTION_FLAG='b';
 constexpr char LONG_OPTION_FLAG='-';
 export constexpr string_view CBP_COMPILER_NAME="c++";
 export struct BuildConfiguration
 {
-	string_view compiler;
-	string_view objectDirectory;
-	string_view artifact;
+	array<string_view,4>svOptions;
 	span<string_view>compilerOptions;
 	span<string_view>linkerOptions;
 	uint8_t binaryOptions;
 	uint8_t threadCount;
 	vector<string_view>targets;
+	vector<string>configurationFileStorage;
 	BuildConfiguration()
-		:compiler(CBP_COMPILER_NAME),objectDirectory(),artifact(),compilerOptions(),linkerOptions(),binaryOptions(),threadCount(1),targets()
+		:svOptions{CBP_COMPILER_NAME},compilerOptions(),linkerOptions(),binaryOptions(),threadCount(1),targets(),configurationFileStorage()
 	{}
 	bool isDisplayCommand()
 		const noexcept
@@ -73,105 +73,182 @@ export struct BuildConfiguration
 	{
 		binaryOptions|=16;
 	}
+	constexpr decltype(auto)compiler(this auto&self)
+		noexcept
+	{
+		return self.svOptions[0];
+	}
+	constexpr decltype(auto)objectDirectory(this auto&self)
+		noexcept
+	{
+		return self.svOptions[1];
+	}
+	constexpr decltype(auto)artifact(this auto&self)
+		noexcept
+	{
+		return self.svOptions[2];
+	}
+	constexpr decltype(auto)moduleDependencyCache(this auto&self)
+		noexcept
+	{
+		return self.svOptions[3];
+	}
 };
+string read_option_file(string_view fname)
+{
+	string s;
+	array<char,8192>buffer;
+	ifstream fin{string{fname}};
+	println("{} {}",fname,(bool)fin);
+	while(fin.read(buffer.data(),buffer.size()))
+	{
+		s.append_range(views::take(buffer,fin.gcount()));
+	}
+	s.append_range(views::take(buffer,fin.gcount()));
+	ranges::fill(views::filter(s,bind_front(equal_to<char>(),'\n')),'\0');
+	return s;
+}
 export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 {
-	using views::enumerate;
 	BuildConfiguration configuration;
 	variant<monostate,string_view*,span<string_view>*>consumeInto;
+	const span<string_view>originalArguments=arguments;
+	vector<string_view>optionFileStack;
+	vector<string_view>currentOptions;
+	vector<array<size_t,2>>optionIndexStack;
 	size_t consume=0;
-	for(auto[index,sv]:enumerate(arguments))
+	bool nextOptionFile=false;
+	optionIndexStack.push_back({0,arguments.size()});
+	while(optionIndexStack.size())
 	{
-		if(consume)
+		size_t&index=optionIndexStack.back().front();
+		size_t length=optionIndexStack.back().back();
+		size_t stackLast=optionIndexStack.size()-1;
+		if(index<length)
 		{
-			if(consumeInto.index())
+			string_view sv=arguments[index];
+			if(nextOptionFile)
 			{
-				if(consumeInto.index()==2)
-				{
-					**get_if<2>(&consumeInto)=arguments.subspan(index,consume);
-				}
-				else
-				{
-					**get_if<1>(&consumeInto)=sv;
-				}
-				consumeInto=monostate{};
+				configuration.configurationFileStorage.push_back(read_option_file(sv));
+				optionFileStack.push_back(string_view{configuration.configurationFileStorage.back()});
+				currentOptions=ranges::to<vector<string_view>>(views::transform(views::split(optionFileStack.back(),"\0"sv),[](auto rg){return string_view{rg};}));
+				arguments=currentOptions;
+				println("{} has text {}",sv,configuration.configurationFileStorage.back());
+				println("{} has options {}",sv,arguments);
+				optionIndexStack.push_back({0,arguments.size()});
+				nextOptionFile=false;
 			}
-			--consume;
-		}
-		else if(sv.size()>=2&&sv.front()=='-')
-		{
-			switch(sv[1])
+			else if(consume)
 			{
-				case COMPILER_OPTION_FLAG:
-					consumeInto=&configuration.compilerOptions;
-					break;
-				case LINKER_OPTION_FLAG:
-					consumeInto=&configuration.linkerOptions;
-					break;
-				case OUTPUT_OPTION_FLAG:
-					consumeInto=&configuration.objectDirectory;
-					consume=1;
-					break;
-				case DISPLAY_OPTION_FLAG:
-					configuration.setDisplayCommand();
-					break;
-				case FORCE_OPTION_FLAG:
-					if(configuration.isForceRecompile())
+				if(consumeInto.index())
+				{
+					if(consumeInto.index()==2)
 					{
-						configuration.setForceRecompileEnhanced();
+						**get_if<2>(&consumeInto)=arguments.subspan(index,consume);
 					}
 					else
 					{
-						configuration.setForceRecompile();
+						**get_if<1>(&consumeInto)=sv;
 					}
-					break;
-				case ARTIFACT_OPTION_FLAG:
-					consumeInto=&configuration.artifact;
-					consume=1;
-					break;
-				case PARALLEL_OPTION_FLAG:
-					if(sv.size()>2)
+					consumeInto=monostate{};
+				}
+				--consume;
+			}
+			else if(sv.size()>=2&&sv.front()=='-')
+			{
+				switch(sv[1])
+				{
+					case COMPILER_OPTION_FLAG:
+						consumeInto=&configuration.compilerOptions;
+						break;
+					case LINKER_OPTION_FLAG:
+						consumeInto=&configuration.linkerOptions;
+						break;
+					case OUTPUT_OPTION_FLAG:
+						consumeInto=&configuration.objectDirectory();
+						consume=1;
+						break;
+					case DISPLAY_OPTION_FLAG:
+						configuration.setDisplayCommand();
+						break;
+					case FORCE_OPTION_FLAG:
+						if(configuration.isForceRecompile())
+						{
+							configuration.setForceRecompileEnhanced();
+						}
+						else
+						{
+							configuration.setForceRecompile();
+						}
+						break;
+					case ARTIFACT_OPTION_FLAG:
+						consumeInto=&configuration.artifact();
+						consume=1;
+						break;
+					case PARALLEL_OPTION_FLAG:
+						if(sv.size()>2)
+						{
+							uint8_t v=1;
+							from_chars(sv.data()+2,sv.data()+sv.size(),v);
+							configuration.threadCount=v;
+						}
+						break;
+					case FILE_OPTION_FLAG:
+						nextOptionFile=true;
+						break;
+					case LONG_OPTION_FLAG:
+						if(sv.substr(2)=="compiler")
+						{
+							consumeInto=&configuration.compiler();
+							consume=1;
+						}
+						else if(sv.substr(2)=="help")
+						{
+							configuration.setHelp();
+						}
+						else if(sv.substr(2)=="version")
+						{
+							configuration.setVersion();
+						}
+						break;
+					default:
+						println("Unrecognized flag {} from argument {} will be ignored, if this was meant to be a file name, prefix with ./",sv[1],sv);
+						break;
+				}
+				if(consumeInto.index()==2)
+				{
+					if(sv.size()==2)
 					{
-						uint8_t v=1;
-						from_chars(sv.data()+2,sv.data()+sv.size(),v);
-						configuration.threadCount=v;
-					}
-					break;
-				case LONG_OPTION_FLAG:
-					if(sv.substr(2)=="compiler")
-					{
-						consumeInto=&configuration.compiler;
 						consume=1;
 					}
-					else if(sv.substr(2)=="help")
+					else
 					{
-						configuration.setHelp();
+						from_chars(sv.data()+2,sv.data()+sv.size(),consume);
 					}
-					else if(sv.substr(2)=="version")
-					{
-						configuration.setVersion();
-					}
-					break;
-				default:
-					println("Unrecognized flag {} from argument {} will be ignored.",sv[1],sv);
-					break;
+				}
 			}
-			if(consumeInto.index()==2)
+			else if(sv.size())
 			{
-				if(sv.size()==2)
-				{
-					consume=1;
-				}
-				else
-				{
-					from_chars(sv.data()+2,sv.data()+sv.size(),consume);
-				}
+				configuration.targets.push_back(sv);
 			}
+			++optionIndexStack[stackLast].front();
 		}
 		else
 		{
-			configuration.targets.push_back(sv);
+			optionIndexStack.pop_back();
+			if(optionIndexStack.size()>1)
+			{
+				optionFileStack.pop_back();
+				currentOptions=ranges::to<vector<string_view>>(views::transform(views::split(optionFileStack.back(),"\0"sv),[](auto rg){return string_view{rg};}));
+				arguments=currentOptions;
+			}
+			else if(optionIndexStack.size()==1)
+			{
+				optionFileStack.pop_back();
+				arguments=originalArguments;
+			}
 		}
 	}
+	println("configuration {} {}",configuration.targets,configuration.compilerOptions);
 	return configuration;
 }

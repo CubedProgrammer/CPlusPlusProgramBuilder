@@ -85,7 +85,7 @@ public:
 		{
 			p.replace_extension(path{"o"});
 		}
-		if(options.objectDirectory.size())
+		if(options.objectDirectory().size())
 		{
 			if(options.targets.size()==1)
 			{
@@ -95,14 +95,14 @@ public:
 				string_view sv{pathString.cbegin()+index+1,pathString.cend()};
 				p=sv;
 			}
-			p=path{options.objectDirectory}/p;
+			p=path{options.objectDirectory()}/p;
 		}
 		return p;
 	}
 	path getFinalOutputFile()
 		const noexcept
 	{
-		if(options.artifact.size()==0)
+		if(options.artifact().size()==0)
 		{
 			if(options.targets.size()&&is_regular_file(path{options.targets.front()}))
 			{
@@ -117,13 +117,13 @@ public:
 		}
 		else
 		{
-			return path{options.artifact};
+			return path{options.artifact()};
 		}
 	}
 	void add_file(path&&p,bool externalDirectory=false)
 	{
 		ModuleData data=parseModuleData(p);
-		const path object=externalDirectory?path{flagger.moduleNameToFile(data.name,options.objectDirectory)}:getOutputFile(p);
+		const path object=externalDirectory?path{flagger.moduleNameToFile(data.name,options.objectDirectory())}:getOutputFile(p);
 		if(!object.empty())
 		{
 			ModuleConnection&connection=externalDirectory?external:internal;
