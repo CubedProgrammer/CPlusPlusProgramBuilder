@@ -142,6 +142,11 @@ public:
 	{
 		return getEitherSTDModulePath("std.compat");
 	}
+	string getModuleExtension()
+		const noexcept
+	{
+		return type==GNU?".gcm":".pcm";
+	}
 	string moduleNameToFile(string_view name,string_view outputDirectory)
 		const
 	{
@@ -162,6 +167,29 @@ public:
 			}
 		}
 		return file;
+	}
+	optional<string>findHeader(path fpath,string_view include,bool searchParent)
+		const
+	{
+		optional<string>opath;
+		if(searchParent)
+		{
+			fpath.replace_filename(include);
+			if(exists(fpath))
+			{
+				opath=fpath.string();
+			}
+		}
+		for(const string&dirstr:views::filter(includeDirectories,[&opath](const string&s){return!opath.has_value();}))
+		{
+			path headerPath{dirstr};
+			headerPath/=path{include};
+			if(exists(headerPath))
+			{
+				opath=headerPath.string();
+			}
+		}
+		return opath;
 	}
 	void addArguments(const BuildConfiguration&configuration)
 	{
@@ -229,6 +257,7 @@ public:
 		return output;
 	}
 	vector<char*>linkProgram(string&artifact,BuildConfiguration&configuration,span<string>files)
+		const
 	{
 		vector<char*>trueLinkerArguments{const_cast<char*>(configuration.compiler().data())};
 		if(type==LLVM)

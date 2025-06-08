@@ -19,7 +19,6 @@ export struct ModuleCompilation
 	file_time_type object;
 	vector<unsigned>dependentProcesses;
 	string name;
-	bool visited;
 };
 export using FileModuleMap=unordered_map<path,ModuleCompilation>;
 export struct ModuleConnection
@@ -120,17 +119,23 @@ public:
 			return path{options.artifact()};
 		}
 	}
+	pair<bool,uint16_t>actually_add_file(FileModuleMap&fmmap,ModuleData data,path file,path out)
+	{
+		const file_time_type lastModify=last_write_time(file);
+		const file_time_type objectModify=exists(out)?last_write_time(out):lastModify-1s;
+		pair<bool,uint16_t>value{lastModify>objectModify,data.imports.size()};
+		fmmap.emplace(std::move(file),ModuleCompilation(std::move(data.imports),out,lastModify,objectModify,{},std::move(data.name)));
+		return value;
+	}
 	void add_file(path&&p,bool externalDirectory=false)
 	{
 		ModuleData data=parseModuleData(p);
-		const path object=externalDirectory?path{flagger.moduleNameToFile(data.name,options.objectDirectory())}:getOutputFile(p);
+		path object=externalDirectory?path{flagger.moduleNameToFile(data.name,options.objectDirectory())}:getOutputFile(p);
 		if(!object.empty())
 		{
 			ModuleConnection&connection=externalDirectory?external:internal;
-			const file_time_type lastModify=last_write_time(p);
-			const file_time_type objectModify=exists(object)?last_write_time(object):lastModify-1s;
 			connection.primaryModuleInterfaceUnits.emplace(data.name,p);
-			connection.files.emplace(std::move(p),ModuleCompilation(std::move(data.imports),object,lastModify,objectModify,{},std::move(data.name),false));	
+			actually_add_file(connection.files,std::move(data),std::move(p),std::move(object));
 		}
 	}
 	void add_directory(const path&p,bool externalDirectory=false)
@@ -182,6 +187,7 @@ public:
 			println("module {} {}",s,p.string());
 		}
 		queue<path>externalImports;
+		FileModuleMap headers;
 		auto interfaceEndIt=internal.primaryModuleInterfaceUnits.end();
 		for(const auto&[filepath,mc]:internal.files)
 		{
@@ -195,26 +201,43 @@ public:
 			}
 			for(const auto&i:mc.dependency)
 			{
-				auto interfaceIt=internal.primaryModuleInterfaceUnits.find(i.name);
 				optional<string>name;
-				bool isExternal=interfaceIt==interfaceEndIt;
-				if(isExternal)
+				bool isExternal=false;
+				if(i.type==MODULE)
 				{
-					auto externalIt=external.primaryModuleInterfaceUnits.find(i.name);
-					if(externalIt!=external.primaryModuleInterfaceUnits.end())
+					auto interfaceIt=internal.primaryModuleInterfaceUnits.find(i.name);
+					isExternal=interfaceIt==interfaceEndIt;
+					if(isExternal)
 					{
-						name=externalIt->second.string();
-						externalImports.push(path{*name});
+						auto externalIt=external.primaryModuleInterfaceUnits.find(i.name);
+						if(externalIt!=external.primaryModuleInterfaceUnits.end())
+						{
+							name=externalIt->second.string();
+							externalImports.push(path{*name});
+						}
+					}
+					else
+					{
+						name=interfaceIt->second.string();
 					}
 				}
 				else
 				{
-					name=interfaceIt->second.string();
+					name=flagger.findHeader(filepath,i.name,i.type==LOCAL_HEADER);
 				}
 				if(name)
 				{
 					auto it=graph.insert({{*name,false,i.type!=MODULE,isExternal},{}}).first;
 					it->second.dependent.push_back(current);
+					if(i.type!=MODULE)
+					{
+						path headerPath(*name);
+						path modulePath=headerPath;
+						modulePath+=path{flagger.getModuleExtension()};
+						auto info=actually_add_file(headers,parseModuleData(*name),std::move(headerPath),std::move(modulePath));
+						it->second.recompile=info.first;
+						it->second.remaining=info.second;
+					}
 				}
 			}
 		}
@@ -253,7 +276,7 @@ public:
 			{
 				compileQueue.push(node);
 			}
-			println("{} {} {} {} {}",node.name,node.notInterface,edges.remaining,edges.recompile,views::transform(edges.dependent,&ForwardGraphNode::name));
+			println("{} {} {} {} {} {}",node.name,node.notInterface,node.header,edges.remaining,edges.recompile,views::transform(edges.dependent,&ForwardGraphNode::name));
 		}
 		unordered_map<unsigned,ForwardGraphNode>processToNode;
 		while(!pm.is_empty()||compileQueue.size())
@@ -263,7 +286,7 @@ public:
 				ForwardGraphNode node=std::move(compileQueue.front());
 				compileQueue.pop();
 				const ForwardGraphNodeData&data=graph.at(node);
-				const ModuleCompilation&mc=node.external?external.files.at(path{node.name}):internal.files.at(path{node.name});
+				const ModuleCompilation&mc=node.header?headers.at({node.name}):node.external?external.files.at(path{node.name}):internal.files.at(path{node.name});
 				if(!node.external)
 				{
 					linkerArguments.push_back(mc.output.string());
