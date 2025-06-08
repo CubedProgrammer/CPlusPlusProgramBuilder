@@ -4,7 +4,7 @@ import cpbuild;
 import flag;
 constexpr unsigned MAJOR=0;
 constexpr unsigned MINOR=2;
-constexpr unsigned PATCH=0;
+constexpr unsigned PATCH=1;
 using namespace std;
 int mainpp(span<string_view>args)
 	noexcept

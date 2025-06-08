@@ -99,7 +99,6 @@ string read_option_file(string_view fname)
 	string s;
 	array<char,8192>buffer;
 	ifstream fin{string{fname}};
-	println("{} {}",fname,(bool)fin);
 	while(fin.read(buffer.data(),buffer.size()))
 	{
 		s.append_range(views::take(buffer,fin.gcount()));
@@ -133,8 +132,6 @@ export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 				optionFileStack.push_back(string_view{configuration.configurationFileStorage.back()});
 				currentOptions=ranges::to<vector<string_view>>(views::transform(views::split(optionFileStack.back(),"\0"sv),[](auto rg){return string_view{rg};}));
 				arguments=currentOptions;
-				println("{} has text {}",sv,configuration.configurationFileStorage.back());
-				println("{} has options {}",sv,arguments);
 				optionIndexStack.push_back({0,arguments.size()});
 				nextOptionFile=false;
 			}
@@ -210,6 +207,10 @@ export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 						{
 							configuration.setVersion();
 						}
+						else
+						{
+							println("Unrecognized flag {} will be ignored.",sv.substr(2));
+						}
 						break;
 					default:
 						println("Unrecognized flag {} from argument {} will be ignored, if this was meant to be a file name, prefix with ./",sv[1],sv);
@@ -249,6 +250,5 @@ export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 			}
 		}
 	}
-	println("configuration {} {}",configuration.targets,configuration.compilerOptions);
 	return configuration;
 }

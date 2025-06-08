@@ -175,16 +175,9 @@ public:
 		}
 		add_file(path{flagger.getSTDModulePath()},true);
 		add_file(path{flagger.getSTDCompatModulePath()},true);
-		println("external {}",external.files.size());
 		for(path t:flagger.getIncludeDirectories())
 		{
-			println("{}",t.string());
 			add_directory(t,true);
-		}
-		println("external {}",external.files.size());
-		for(const auto&[s,p]:external.primaryModuleInterfaceUnits)
-		{
-			println("module {} {}",s,p.string());
 		}
 		queue<path>externalImports;
 		FileModuleMap headers;
@@ -232,10 +225,9 @@ public:
 					if(i.type!=MODULE)
 					{
 						path headerPath(*name);
-						path modulePath=headerPath;
-						modulePath+=path{flagger.getModuleExtension()};
+						path modulePath(flagger.headerNameToOutput(i.name,options.objectDirectory()));
 						auto info=actually_add_file(headers,parseModuleData(*name),std::move(headerPath),std::move(modulePath));
-						it->second.recompile=info.first;
+						it->second.recompile=info.first||options.isForceRecompile();
 						it->second.remaining=info.second;
 					}
 				}
@@ -245,7 +237,6 @@ public:
 		{
 			path importPath=std::move(externalImports.front());
 			externalImports.pop();
-			println("externally importing {}",importPath.string());
 			ForwardGraphNode current{importPath.string(),false,false,true};
 			const ModuleCompilation&mc=external.files.at(importPath);
 			bool toCompile=options.isForceRecompileEnhanced()||mc.source>mc.object;
@@ -258,11 +249,9 @@ public:
 			for(const auto&i:mc.dependency)
 			{
 				auto externalIt=external.primaryModuleInterfaceUnits.find(i.name);
-				println("depends on {}",i.name);
 				if(externalIt!=external.primaryModuleInterfaceUnits.end())
 				{
 					path name=externalIt->second;
-					println("{} is {}",i.name,name.string());
 					externalImports.push(name);
 					auto it=graph.insert({{name.string(),false,i.type!=MODULE,true},{}}).first;
 					it->second.dependent.push_back(current);
@@ -276,7 +265,6 @@ public:
 			{
 				compileQueue.push(node);
 			}
-			println("{} {} {} {} {} {}",node.name,node.notInterface,node.header,edges.remaining,edges.recompile,views::transform(edges.dependent,&ForwardGraphNode::name));
 		}
 		unordered_map<unsigned,ForwardGraphNode>processToNode;
 		while(!pm.is_empty()||compileQueue.size())
@@ -287,15 +275,15 @@ public:
 				compileQueue.pop();
 				const ForwardGraphNodeData&data=graph.at(node);
 				const ModuleCompilation&mc=node.header?headers.at({node.name}):node.external?external.files.at(path{node.name}):internal.files.at(path{node.name});
-				if(!node.external)
+				if(!node.external&&!node.header)
 				{
 					linkerArguments.push_back(mc.output.string());
 				}
 				if(data.recompile)
 				{
 					println("Compiling {}",node.name);
-					string outputfile=node.external?"/dev/null":mc.output.string();
-					auto arguments=flagger.compileFile(node.name,outputfile,mc.name,options,node.notInterface,node.header);
+					string outputfile=node.external&&!node.header?"/dev/null":mc.output.string();
+					auto arguments=flagger.compileFile(node.name,outputfile,mc.name,mc.dependency,options,node.notInterface,node.header);
 					auto opid=pm.run(arguments,options.isDisplayCommand());
 					if(opid)
 					{

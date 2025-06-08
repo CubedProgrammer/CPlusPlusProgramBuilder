@@ -1,6 +1,7 @@
 export module flag;
 import std;
 import configuration;
+import dependency;
 import utils;
 using namespace std;
 using namespace literals;
@@ -15,9 +16,25 @@ constexpr string_view CBP_LANGUAGE_FLAG="-x";
 constexpr string_view CBP_MODULE_LANGUAGE="c++-module";
 constexpr string_view CBP_LANGUAGE_VERSION="-std=c++20";
 constexpr string_view CBP_STDLIB_FLAG="-stdlib=libc++";
+constexpr string_view CBP_CLANG_PRECOMPILE_FLAG="--precompile";
+constexpr string_view CBP_HEADER_LANGUAGE="c++-user-header";
+string clangPrebuiltModuleFlag;
+string clangModulePath;
+vector<string>clangHeaderFlagStorage;
 char*svConstCaster(string_view sv)
 {
 	return const_cast<char*>(sv.data());
+}
+string prependOutputDirectory(string file,string_view outputDirectory)
+{
+	if(outputDirectory.size())
+	{
+		string temp{outputDirectory};
+		temp+='/';
+		temp+=file;
+		file=std::move(temp);
+	}
+	return file;
 }
 export enum CompilerType
 {
@@ -84,7 +101,7 @@ export pair<CompilerType,vector<string>>getCompilerInformation(const BuildConfig
 				}
 				if(insert)
 				{
-					directories.push_back(string{sv.substr(1)});
+					directories.push_back(canonical(path{sv.substr(1)}).string());
 				}
 				if(sv=="#include <...> search starts here:")
 				{
@@ -104,12 +121,10 @@ export class CompilerConfigurer
 	CompilerType type;
 	vector<string>includeDirectories;
 	vector<char*>compilerArguments;
-	string clangPrebuiltModuleFlag;
-	string clangModulePath;
 public:
 	CompilerConfigurer(CompilerType ct,vector<string>id)
 		noexcept
-		:type(ct),includeDirectories(std::move(id)),compilerArguments(),clangPrebuiltModuleFlag()
+		:type(ct),includeDirectories(std::move(id)),compilerArguments()
 	{}
 	CompilerConfigurer()
 		noexcept
@@ -158,15 +173,16 @@ public:
 		if(name.size())
 		{
 			file+=type==GNU?".gcm":".pcm";
-			if(outputDirectory.size())
-			{
-				string temp{outputDirectory};
-				temp+='/';
-				temp+=file;
-				file=std::move(temp);
-			}
+			file=prependOutputDirectory(file,outputDirectory);
 		}
 		return file;
+	}
+	string headerNameToOutput(string_view name,string_view outputDirectory)
+		const
+	{
+		string s(name);
+		s+=".pcm";
+		return prependOutputDirectory(std::move(s),outputDirectory);
 	}
 	optional<string>findHeader(path fpath,string_view include,bool searchParent)
 		const
@@ -180,7 +196,7 @@ public:
 				opath=fpath.string();
 			}
 		}
-		for(const string&dirstr:views::filter(includeDirectories,[&opath](const string&s){return!opath.has_value();}))
+		for(const string&dirstr:views::filter(includeDirectories,[&opath](const string&){return!opath.has_value();}))
 		{
 			path headerPath{dirstr};
 			headerPath/=path{include};
@@ -235,19 +251,44 @@ public:
 		}
 		compilerArguments.append_range(views::transform(configuration.compilerOptions,svConstCaster));
 	}
-	vector<char*>compileFile(string&filename,string&outputname,const string&moduleName,const BuildConfiguration&configuration,bool notInterface,bool isHeader)
+	vector<char*>compileFile(string&filename,string&outputname,const string&moduleName,span<const ImportUnit>imports,const BuildConfiguration&configuration,bool notInterface,bool isHeader)
+		const
 	{
 		vector<char*>output=compilerArguments;
-		if(type==LLVM&&!notInterface)
+		if(type==LLVM)
 		{
-			output.push_back(const_cast<char*>(CBP_LANGUAGE_FLAG.data()));
-			output.push_back(const_cast<char*>(CBP_MODULE_LANGUAGE.data()));
+			clangHeaderFlagStorage.clear();
+			for(const ImportUnit&unit:views::filter(imports,[](const ImportUnit&u){return u.type!=MODULE;}))
+			{
+				clangHeaderFlagStorage.push_back("-fmodule-file="+headerNameToOutput(unit.name,configuration.objectDirectory()));
+			}
+			output.append_range(views::transform(clangHeaderFlagStorage,[](string&s){return s.data();}));
+			if(!notInterface&&!isHeader)
+			{
+				output.push_back(const_cast<char*>(CBP_LANGUAGE_FLAG.data()));
+				output.push_back(const_cast<char*>(CBP_MODULE_LANGUAGE.data()));
+			}
+		}
+		if(isHeader)
+		{
+			if(type==LLVM)
+			{
+				output.push_back(svConstCaster(CBP_CLANG_PRECOMPILE_FLAG));
+			}
+			output.push_back(svConstCaster(CBP_LANGUAGE_FLAG));
+			output.push_back(svConstCaster(CBP_HEADER_LANGUAGE));
 		}
 		output.push_back(filename.data());
-		output.push_back(const_cast<char*>(CBP_COMPILE_FLAG.data()));
-		output.push_back(const_cast<char*>(CBP_OUTPUT_FLAG.data()));
-		output.push_back(outputname.data());
-		if(type==LLVM&&!notInterface)
+		if(!isHeader)
+		{
+			output.push_back(const_cast<char*>(CBP_COMPILE_FLAG.data()));
+		}
+		if(type==LLVM||!isHeader)
+		{
+			output.push_back(const_cast<char*>(CBP_OUTPUT_FLAG.data()));
+			output.push_back(outputname.data());
+		}
+		if(type==LLVM&&!notInterface&&!isHeader)
 		{
 			clangModulePath="-fmodule-output=";
 			clangModulePath+=moduleNameToFile(moduleName,configuration.objectDirectory());
