@@ -20,8 +20,9 @@ export struct BuildConfiguration
 	uint8_t threadCount;
 	vector<string_view>targets;
 	vector<string>configurationFileStorage;
+	vector<vector<string_view>>configurationSpanStorage;
 	BuildConfiguration()
-		:svOptions{CBP_COMPILER_NAME},compilerOptions(),linkerOptions(),binaryOptions(),threadCount(1),targets(),configurationFileStorage()
+		:svOptions{CBP_COMPILER_NAME},compilerOptions(),linkerOptions(),binaryOptions(),threadCount(1),targets(),configurationFileStorage(),configurationSpanStorage()
 	{}
 	bool isDisplayCommand()
 		const noexcept
@@ -113,7 +114,7 @@ export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 	variant<monostate,string_view*,span<string_view>*>consumeInto;
 	const span<string_view>originalArguments=arguments;
 	vector<string_view>optionFileStack;
-	vector<string_view>currentOptions;
+	vector<span<string_view>>optionSpanStack;
 	vector<array<size_t,2>>optionIndexStack;
 	size_t consume=0;
 	bool nextOptionFile=false;
@@ -130,8 +131,9 @@ export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 			{
 				configuration.configurationFileStorage.push_back(read_option_file(sv));
 				optionFileStack.push_back(string_view{configuration.configurationFileStorage.back()});
-				currentOptions=ranges::to<vector<string_view>>(views::transform(views::split(optionFileStack.back(),"\0"sv),[](auto rg){return string_view{rg};}));
-				arguments=currentOptions;
+				configuration.configurationSpanStorage.push_back(ranges::to<vector<string_view>>(views::transform(views::split(optionFileStack.back(),"\0"sv),[](auto rg){return string_view{rg};})));
+				optionSpanStack.push_back(configuration.configurationSpanStorage.back());
+				arguments=optionSpanStack.back();
 				optionIndexStack.push_back({0,arguments.size()});
 				nextOptionFile=false;
 			}
@@ -240,12 +242,13 @@ export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 			if(optionIndexStack.size()>1)
 			{
 				optionFileStack.pop_back();
-				currentOptions=ranges::to<vector<string_view>>(views::transform(views::split(optionFileStack.back(),"\0"sv),[](auto rg){return string_view{rg};}));
-				arguments=currentOptions;
+				optionSpanStack.pop_back();
+				arguments=optionSpanStack.back();
 			}
 			else if(optionIndexStack.size()==1)
 			{
 				optionFileStack.pop_back();
+				optionSpanStack.pop_back();
 				arguments=originalArguments;
 			}
 		}
