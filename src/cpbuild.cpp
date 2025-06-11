@@ -59,7 +59,6 @@ extern unique_ptr<ProgramBuilder>singletonPointerProgramBuilder;
 struct ProgramBuilderConstructorTag{};
 class ProgramBuilder
 {
-	string_view name;
 	BuildConfiguration options;
 	vector<string>linkerArguments;
 	ModuleConnection internal;
@@ -68,9 +67,9 @@ class ProgramBuilder
 	CompilerConfigurer flagger;
 	ParallelProcessManager pm;
 public:
-	ProgramBuilder(ProgramBuilderConstructorTag,string_view name,pair<CompilerType,vector<string>>tai,BuildConfiguration op)
+	ProgramBuilder(ProgramBuilderConstructorTag,pair<CompilerType,vector<string>>tai,BuildConfiguration op)
 		noexcept
-		:name(name),options(std::move(op)),linkerArguments(),internal(),graph(),flagger(tai.first,std::move(tai.second)),pm(op.threadCount)
+		:options(std::move(op)),linkerArguments(),internal(),graph(),flagger(tai.first,std::move(tai.second)),pm(op.threadCount)
 	{}
 	ProgramBuilder()=delete;
 	ProgramBuilder(const ProgramBuilder&)=delete;
@@ -161,6 +160,7 @@ public:
 	void cpbuild()
 	{
 		span<string_view>targets=options.targets;
+		println("target {}",targets);
 		flagger.addArguments(options);
 		for(path t:targets)
 		{
@@ -179,7 +179,7 @@ public:
 		{
 			add_directory(t,true);
 		}
-		queue<path>externalImports;
+		set<path>externalImports;
 		FileModuleMap headers;
 		auto interfaceEndIt=internal.primaryModuleInterfaceUnits.end();
 		for(const auto&[filepath,mc]:internal.files)
@@ -206,7 +206,7 @@ public:
 						if(externalIt!=external.primaryModuleInterfaceUnits.end())
 						{
 							name=externalIt->second.string();
-							externalImports.push(path{*name});
+							externalImports.insert(path{*name});
 						}
 					}
 					else
@@ -235,12 +235,13 @@ public:
 		}
 		while(externalImports.size())
 		{
-			path importPath=std::move(externalImports.front());
-			externalImports.pop();
+			path importPath=std::move(*externalImports.begin());
+			externalImports.erase(externalImports.begin());
 			ForwardGraphNode current{importPath.string(),false,false,true};
 			const ModuleCompilation&mc=external.files.at(importPath);
 			bool toCompile=options.isForceRecompileEnhanced()||mc.source>mc.object;
 			auto[itToCurrent,succ]=graph.insert({current,{{},static_cast<uint16_t>(mc.dependency.size()),toCompile}});
+			println("external import {} {}",mc.dependency.size(),importPath.string());
 			if(!succ)
 			{
 				itToCurrent->second.remaining=mc.dependency.size();
@@ -248,13 +249,33 @@ public:
 			}
 			for(const auto&i:mc.dependency)
 			{
-				auto externalIt=external.primaryModuleInterfaceUnits.find(i.name);
-				if(externalIt!=external.primaryModuleInterfaceUnits.end())
+				optional<string>oname;
+				if(i.type==MODULE)
 				{
-					path name=externalIt->second;
-					externalImports.push(name);
-					auto it=graph.insert({{name.string(),false,i.type!=MODULE,true},{}}).first;
+					auto externalIt=external.primaryModuleInterfaceUnits.find(i.name);
+					if(externalIt!=external.primaryModuleInterfaceUnits.end())
+					{
+						path name=externalIt->second;
+						externalImports.insert(name);
+						oname=name.string();
+					}
+				}
+				else
+				{
+					oname=flagger.findHeader(importPath,i.name,i.type==LOCAL_HEADER);
+				}
+				if(oname)
+				{
+					auto it=graph.insert({{*oname,false,i.type!=MODULE,true},{}}).first;
 					it->second.dependent.push_back(current);
+					if(i.type!=MODULE)
+					{
+						path headerPath(*oname);
+						path modulePath(flagger.headerNameToOutput(i.name,options.objectDirectory()));
+						auto info=actually_add_file(headers,parseModuleData(*oname),std::move(headerPath),std::move(modulePath));
+						it->second.recompile=info.first||options.isForceRecompile();
+						it->second.remaining=info.second;
+					}
 				}
 			}
 		}
@@ -334,12 +355,12 @@ public:
 		pm.wait_remaining_processes();
 	}
 	~ProgramBuilder()=default;
-	static ProgramBuilder&getInstance(string_view program,pair<CompilerType,vector<string>>tai,BuildConfiguration options)
+	static ProgramBuilder&getInstance(pair<CompilerType,vector<string>>tai,BuildConfiguration options)
 		noexcept
 	{
 		if(!singletonPointerProgramBuilder)
 		{
-			singletonPointerProgramBuilder=make_unique<ProgramBuilder>(ProgramBuilderConstructorTag{},program,std::move(tai),std::move(options));
+			singletonPointerProgramBuilder=make_unique<ProgramBuilder>(ProgramBuilderConstructorTag{},std::move(tai),std::move(options));
 		}
 		return*singletonPointerProgramBuilder;
 	}

@@ -34,7 +34,7 @@ int mainpp(span<string_view>args)
 	}
 	else
 	{
-		ProgramBuilder&builder=ProgramBuilder::getInstance(program,std::move(ci),std::move(configuration));
+		ProgramBuilder&builder=ProgramBuilder::getInstance(std::move(ci),std::move(configuration));
 		builder.cpbuild();
 	}
 	return 0;
