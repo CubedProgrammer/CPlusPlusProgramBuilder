@@ -141,26 +141,35 @@ public:
 	{
 		using namespace string_view_literals;
 		auto permitted=ranges::to<vector<string>>(views::split(CBP_ALLOWED_EXTENSIONS," "sv));
+		set<path>directoriesToCreate;
+		if(!externalDirectory&&options.objectDirectory().size())
+		{
+			path toBeCreated(getOutputFile(p));
+			if(!equivalent(toBeCreated,path{options.objectDirectory()}))
+			{
+				create_directory(toBeCreated);
+			}
+		}
 		for(const auto&en:recursive_directory_iterator(p))
 		{
-			const path&current=en.path();
-			if(en.is_directory())
-			{
-				if(!externalDirectory)
-				{
-					create_directory(getOutputFile(current));
-				}
-			}
-			else if(current.has_extension()&&ranges::contains(permitted,current.extension().string().substr(1))&&en.is_regular_file())
+			path current=en.path();
+			if(current.has_extension()&&ranges::contains(permitted,current.extension().string().substr(1))&&en.is_regular_file())
 			{
 				add_file(path(current),externalDirectory);
+				if(!externalDirectory&&options.objectDirectory().size())
+				{
+					directoriesToCreate.insert(getOutputFile(current.remove_filename()));
+				}
 			}
+		}
+		for(const path&d:directoriesToCreate)
+		{
+			create_directory(d);
 		}
 	}
 	void cpbuild()
 	{
 		span<string_view>targets=options.targets;
-		println("target {}",targets);
 		flagger.addArguments(options);
 		for(path t:targets)
 		{
@@ -241,7 +250,6 @@ public:
 			const ModuleCompilation&mc=external.files.at(importPath);
 			bool toCompile=options.isForceRecompileEnhanced()||mc.source>mc.object;
 			auto[itToCurrent,succ]=graph.insert({current,{{},static_cast<uint16_t>(mc.dependency.size()),toCompile}});
-			println("external import {} {}",mc.dependency.size(),importPath.string());
 			if(!succ)
 			{
 				itToCurrent->second.remaining=mc.dependency.size();
@@ -302,7 +310,10 @@ public:
 				}
 				if(data.recompile)
 				{
-					println("Compiling {}",node.name);
+					if(options.isDisplayCommand())
+					{
+						println("Compiling {}",node.name);
+					}
 					string outputfile=node.external&&!node.header?"/dev/null":mc.output.string();
 					auto arguments=flagger.compileFile(node.name,outputfile,mc.name,mc.dependency,options,node.notInterface,node.header);
 					auto opid=pm.run(arguments,options.isDisplayCommand());
@@ -315,7 +326,7 @@ public:
 						println("Compiling {} failed",node.name);
 					}
 				}
-				else
+				else if(options.isDisplayCommand())
 				{
 					println("{} does not need to be recompiled",node.name);
 				}
