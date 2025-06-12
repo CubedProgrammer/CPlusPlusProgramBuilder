@@ -182,11 +182,40 @@ public:
 				add_file(std::move(t));
 			}
 		}
-		add_file(path{flagger.getSTDModulePath()},true);
-		add_file(path{flagger.getSTDCompatModulePath()},true);
-		for(path t:flagger.getIncludeDirectories())
+		if(options.moduleMapCache().size())
 		{
-			add_directory(t,true);
+			ifstream fin(string{options.moduleMapCache()});
+			string line;
+			while(getline(fin,line))
+			{
+				if(line.size())
+				{
+					add_file(path{line},true);
+				}
+			}
+			path stdPath(flagger.getSTDModulePath());
+			path stdCompatPath(flagger.getSTDCompatModulePath());
+			auto[stdIt,stdInserted]=external.primaryModuleInterfaceUnits.insert({"std",stdPath});
+			auto[stdCompatIt,stdCompatInserted]=external.primaryModuleInterfaceUnits.insert({"std.compat",stdPath});
+			if(stdInserted)
+			{
+				ModuleData data=parseModuleData(stdPath);
+				actually_add_file(external.files,std::move(data),std::move(stdPath),path{flagger.moduleNameToFile("std",options.objectDirectory())});
+			}
+			if(stdCompatInserted)
+			{
+				ModuleData data=parseModuleData(stdCompatPath);
+				actually_add_file(external.files,std::move(data),std::move(stdCompatPath),path{flagger.moduleNameToFile("std.compat",options.objectDirectory())});
+			}
+		}
+		else
+		{
+			add_file(path{flagger.getSTDModulePath()},true);
+			add_file(path{flagger.getSTDCompatModulePath()},true);
+			for(path t:flagger.getIncludeDirectories())
+			{
+				add_directory(t,true);
+			}
 		}
 		queue<path>externalImports;
 		unordered_set<path>externalImportVisited;
@@ -215,8 +244,8 @@ public:
 						auto externalIt=external.primaryModuleInterfaceUnits.find(i.name);
 						if(externalIt!=external.primaryModuleInterfaceUnits.end())
 						{
-							name=externalIt->second.string();
-							path namepath(*name);
+							path namepath(externalIt->second);
+							name=namepath.string();
 							if(externalImportVisited.insert(namepath).second)
 							{
 								externalImports.push(std::move(namepath));
@@ -260,7 +289,10 @@ public:
 				itToCurrent->second.remaining=mc.dependency.size();
 				itToCurrent->second.recompile=toCompile;
 			}
-			println("dependencies {} {} {}",importPath.string(),itToCurrent->second.remaining,views::transform(mc.dependency,&ImportUnit::name));
+			if(options.isDumpModuleMap())
+			{
+				println("{}",importPath.string());
+			}
 			for(const auto&i:mc.dependency)
 			{
 				optional<string>oname;
@@ -285,7 +317,6 @@ public:
 				{
 					auto it=graph.insert({{*oname,false,i.type!=MODULE,true},{}}).first;
 					it->second.dependent.push_back(current);
-					println("dependents {} {}",i.name,views::transform(it->second.dependent,&ForwardGraphNode::name));
 					if(i.type!=MODULE)
 					{
 						path headerPath(*oname);
@@ -302,7 +333,6 @@ public:
 		{
 			if(edges.remaining==0)
 			{
-				println("adding {} to compile queue",node.name);
 				compileQueue.push(node);
 			}
 		}

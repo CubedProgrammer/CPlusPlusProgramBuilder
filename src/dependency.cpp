@@ -2,7 +2,6 @@ export module dependency;
 import std;
 using namespace std;
 using std::filesystem::path;
-//bool first=true;
 export enum ImportType
 {
 	MODULE,SYS_HEADER,LOCAL_HEADER
@@ -147,14 +146,6 @@ vector<string>tokenizeData(const path&file)
 	{
 		tokens.push_back(std::move(current));
 	}
-	/*if(first)
-	{
-		for(const string&s:tokens)
-		{
-			println("{}",s);
-		}
-		first=false;
-	}*/
 	return tokens;
 }
 export ModuleData parseModuleData(const path&file)

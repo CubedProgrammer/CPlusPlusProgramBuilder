@@ -4,7 +4,7 @@ import cpbuild;
 import flag;
 constexpr unsigned MAJOR=0;
 constexpr unsigned MINOR=2;
-constexpr unsigned PATCH=2;
+constexpr unsigned PATCH=3;
 using namespace std;
 using filesystem::current_path;
 int mainpp(span<string_view>args)
@@ -44,6 +44,8 @@ int mainpp(span<string_view>args)
 			println("-{}{{N}}: Specifies that N processess allowed to run in parallel, set this to the number of threads on this computer for maximum performance.",PARALLEL_OPTION_FLAG);
 			println("-{} FILE: Read options from this file, the file must have one option per line.",FILE_OPTION_FLAG);
 			println("--compiler FILE: Specifies the path to the compiler to use.");
+			println("--display-module-map: Print a list of values, the paths of the module interface units of the external modules imported.");
+			println("--module-interface FILE: Read the specified file for the list of external module interface units to read, one file per line.");
 			println("--version: Displays the version of the program.");
 			println("--help: Displays this wall of text.");
 		}

@@ -49,6 +49,11 @@ export struct BuildConfiguration
 	{
 		return(binaryOptions>>4&1)==1;
 	}
+	bool isDumpModuleMap()
+		const noexcept
+	{
+		return(binaryOptions>>5&1)==1;
+	}
 	void setDisplayCommand()
 		noexcept
 	{
@@ -74,6 +79,10 @@ export struct BuildConfiguration
 	{
 		binaryOptions|=16;
 	}
+	void setDumpModuleMap()
+	{
+		binaryOptions|=32;
+	}
 	constexpr decltype(auto)compiler(this auto&self)
 		noexcept
 	{
@@ -89,7 +98,7 @@ export struct BuildConfiguration
 	{
 		return self.svOptions[2];
 	}
-	constexpr decltype(auto)moduleDependencyCache(this auto&self)
+	constexpr decltype(auto)moduleMapCache(this auto&self)
 		noexcept
 	{
 		return self.svOptions[3];
@@ -116,6 +125,7 @@ export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 	vector<string_view>optionFileStack;
 	vector<span<string_view>>optionSpanStack;
 	vector<array<size_t,2>>optionIndexStack;
+	string_view flagname;
 	size_t consume=0;
 	bool nextOptionFile=false;
 	optionIndexStack.push_back({0,arguments.size()});
@@ -196,18 +206,28 @@ export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 						nextOptionFile=true;
 						break;
 					case LONG_OPTION_FLAG:
-						if(sv.substr(2)=="compiler")
+						flagname=sv.substr(2);
+						if(flagname=="compiler")
 						{
 							consumeInto=&configuration.compiler();
 							consume=1;
 						}
-						else if(sv.substr(2)=="help")
+						else if(flagname=="help")
 						{
 							configuration.setHelp();
 						}
-						else if(sv.substr(2)=="version")
+						else if(flagname=="version")
 						{
 							configuration.setVersion();
+						}
+						else if(flagname=="display-module-map")
+						{
+							configuration.setDumpModuleMap();
+						}
+						else if(flagname=="module-interface")
+						{
+							consumeInto=&configuration.moduleMapCache();
+							consume=1;
 						}
 						else
 						{
