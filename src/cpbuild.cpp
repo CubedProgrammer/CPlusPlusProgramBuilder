@@ -188,7 +188,8 @@ public:
 		{
 			add_directory(t,true);
 		}
-		set<path>externalImports;
+		queue<path>externalImports;
+		unordered_set<path>externalImportVisited;
 		FileModuleMap headers;
 		auto interfaceEndIt=internal.primaryModuleInterfaceUnits.end();
 		for(const auto&[filepath,mc]:internal.files)
@@ -215,7 +216,11 @@ public:
 						if(externalIt!=external.primaryModuleInterfaceUnits.end())
 						{
 							name=externalIt->second.string();
-							externalImports.insert(path{*name});
+							path namepath(*name);
+							if(externalImportVisited.insert(namepath).second)
+							{
+								externalImports.push(std::move(namepath));
+							}
 						}
 					}
 					else
@@ -244,8 +249,8 @@ public:
 		}
 		while(externalImports.size())
 		{
-			path importPath=std::move(*externalImports.begin());
-			externalImports.erase(externalImports.begin());
+			path importPath=std::move(externalImports.front());
+			externalImports.pop();
 			ForwardGraphNode current{importPath.string(),false,false,true};
 			const ModuleCompilation&mc=external.files.at(importPath);
 			bool toCompile=options.isForceRecompileEnhanced()||mc.source>mc.object;
@@ -255,6 +260,7 @@ public:
 				itToCurrent->second.remaining=mc.dependency.size();
 				itToCurrent->second.recompile=toCompile;
 			}
+			println("dependencies {} {} {}",importPath.string(),itToCurrent->second.remaining,views::transform(mc.dependency,&ImportUnit::name));
 			for(const auto&i:mc.dependency)
 			{
 				optional<string>oname;
@@ -263,8 +269,11 @@ public:
 					auto externalIt=external.primaryModuleInterfaceUnits.find(i.name);
 					if(externalIt!=external.primaryModuleInterfaceUnits.end())
 					{
-						path name=externalIt->second;
-						externalImports.insert(name);
+						const path&name=externalIt->second;
+						if(externalImportVisited.insert(name).second)
+						{
+							externalImports.push(name);
+						}
 						oname=name.string();
 					}
 				}
@@ -276,6 +285,7 @@ public:
 				{
 					auto it=graph.insert({{*oname,false,i.type!=MODULE,true},{}}).first;
 					it->second.dependent.push_back(current);
+					println("dependents {} {}",i.name,views::transform(it->second.dependent,&ForwardGraphNode::name));
 					if(i.type!=MODULE)
 					{
 						path headerPath(*oname);
@@ -292,6 +302,7 @@ public:
 		{
 			if(edges.remaining==0)
 			{
+				println("adding {} to compile queue",node.name);
 				compileQueue.push(node);
 			}
 		}
