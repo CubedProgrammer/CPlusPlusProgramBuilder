@@ -1,10 +1,11 @@
+#include <print>
 import std;
 import configuration;
 import cpbuild;
 import flag;
 constexpr unsigned MAJOR=0;
 constexpr unsigned MINOR=2;
-constexpr unsigned PATCH=3;
+constexpr unsigned PATCH=4;
 using namespace std;
 using filesystem::current_path;
 int mainpp(span<string_view>args)
@@ -46,6 +47,7 @@ int mainpp(span<string_view>args)
 			println("--compiler FILE: Specifies the path to the compiler to use.");
 			println("--display-module-map: Print a list of values, the paths of the module interface units of the external modules imported.");
 			println("--module-interface FILE: Read the specified file for the list of external module interface units to read, one file per line.");
+			println("--display-dependency-graph: Print a list of values, a source file and all files it imports, each value separated by two line feeds.");
 			println("--version: Displays the version of the program.");
 			println("--help: Displays this wall of text.");
 		}

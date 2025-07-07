@@ -120,7 +120,7 @@ vector<string>tokenizeData(const path&file)
 		escaped=false;
 		if(c=='\n')
 		{
-			insert=inLineComment;
+			insert=inLineComment||insert;
 			inLineComment=false;
 		}
 		if(insert&&current.size())

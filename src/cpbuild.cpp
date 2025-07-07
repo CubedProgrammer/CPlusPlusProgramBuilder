@@ -145,10 +145,7 @@ public:
 		if(!externalDirectory&&options.objectDirectory().size())
 		{
 			path toBeCreated(getOutputFile(p));
-			if(!equivalent(toBeCreated,path{options.objectDirectory()}))
-			{
-				create_directory(toBeCreated);
-			}
+			create_directory(toBeCreated);
 		}
 		for(const auto&en:recursive_directory_iterator(p))
 		{
@@ -215,6 +212,14 @@ public:
 			for(path t:flagger.getIncludeDirectories())
 			{
 				add_directory(t,true);
+			}
+		}
+		if(options.isDumpDependencyGraph())
+		{
+			for(const auto&[p,mc]:internal.files)
+			{
+				auto importstr=views::join(views::transform(mc.dependency,[](const ImportUnit&unit){return unit.name+'\n';}));
+				println("{}\n{}",p.string(),ranges::to<string>(importstr));
 			}
 		}
 		queue<path>externalImports;

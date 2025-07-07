@@ -54,6 +54,11 @@ export struct BuildConfiguration
 	{
 		return(binaryOptions>>5&1)==1;
 	}
+	bool isDumpDependencyGraph()
+		const noexcept
+	{
+		return(binaryOptions>>6&1)==1;
+	}
 	void setDisplayCommand()
 		noexcept
 	{
@@ -80,8 +85,14 @@ export struct BuildConfiguration
 		binaryOptions|=16;
 	}
 	void setDumpModuleMap()
+		noexcept
 	{
 		binaryOptions|=32;
+	}
+	void setDumpDependencyGraph()
+		noexcept
+	{
+		binaryOptions|=64;
 	}
 	constexpr decltype(auto)compiler(this auto&self)
 		noexcept
@@ -229,9 +240,13 @@ export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 							consumeInto=&configuration.moduleMapCache();
 							consume=1;
 						}
+						else if(flagname=="display-dependency-graph")
+						{
+							configuration.setDumpDependencyGraph();
+						}
 						else
 						{
-							println("Unrecognized flag {} will be ignored.",sv.substr(2));
+							println("Unrecognized flag {} will be ignored.",flagname);
 						}
 						break;
 					default:
