@@ -25,8 +25,12 @@ char*svConstCaster(string_view sv)
 {
 	return const_cast<char*>(sv.data());
 }
-string prependOutputDirectory(string file,string_view outputDirectory)
+string prependOutputDirectory(string file,string_view outputDirectory, bool isGCC)
 {
+	if(isGCC)
+	{
+		outputDirectory=outputDirectory.size()>0?outputDirectory:"gcm.cache";
+	}
 	if(outputDirectory.size())
 	{
 		string temp{outputDirectory};
@@ -173,7 +177,7 @@ public:
 		if(name.size())
 		{
 			file+=type==GNU?".gcm":".pcm";
-			file=prependOutputDirectory(file,outputDirectory);
+			file=prependOutputDirectory(file,outputDirectory,type==GNU);
 		}
 		return file;
 	}
@@ -182,7 +186,7 @@ public:
 	{
 		string s(name);
 		s+=".pcm";
-		return prependOutputDirectory(std::move(s),outputDirectory);
+		return prependOutputDirectory(std::move(s),outputDirectory,type==GNU);
 	}
 	optional<string>findHeader(path fpath,string_view include,bool searchParent)
 		const

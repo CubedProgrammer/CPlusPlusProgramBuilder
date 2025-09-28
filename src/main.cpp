@@ -1,11 +1,10 @@
-#include <print>
 import std;
 import configuration;
 import cpbuild;
 import flag;
 constexpr unsigned MAJOR=0;
 constexpr unsigned MINOR=2;
-constexpr unsigned PATCH=4;
+constexpr unsigned PATCH=5;
 using namespace std;
 using filesystem::current_path;
 int mainpp(span<string_view>args)

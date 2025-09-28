@@ -88,9 +88,8 @@ public:
 			if(options.targets.size()==1)
 			{
 				string pathString=p.string();
-				size_t index=pathString.find('/');
-				index=index==string::npos?pathString.size()-1:index;
-				string_view sv{pathString.cbegin()+index+1,pathString.cend()};
+				size_t index=pathString.rfind('/')+1;
+				string_view sv{pathString.cbegin()+index,pathString.cend()};
 				p=sv;
 			}
 			p=path{options.objectDirectory()}/p;
