@@ -21,10 +21,6 @@ constexpr string_view CBP_HEADER_LANGUAGE="c++-user-header";
 string clangPrebuiltModuleFlag;
 string clangModulePath;
 vector<string>clangHeaderFlagStorage;
-char*svConstCaster(string_view sv)
-{
-	return const_cast<char*>(sv.data());
-}
 string prependOutputDirectory(string file,string_view outputDirectory, bool isGCC)
 {
 	if(isGCC)

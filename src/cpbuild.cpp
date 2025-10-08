@@ -127,7 +127,7 @@ public:
 	}
 	void add_file(path&&p,bool externalDirectory=false)
 	{
-		ModuleData data=parseModuleData(p);
+		ModuleData data=parseModuleData(options,p);
 		path object=externalDirectory?path{flagger.moduleNameToFile(data.name,options.objectDirectory())}:getOutputFile(p);
 		if(!object.empty())
 		{
@@ -195,12 +195,12 @@ public:
 			auto[stdCompatIt,stdCompatInserted]=external.primaryModuleInterfaceUnits.insert({"std.compat",stdPath});
 			if(stdInserted)
 			{
-				ModuleData data=parseModuleData(stdPath);
+				ModuleData data=parseModuleData(options,stdPath);
 				actually_add_file(external.files,std::move(data),std::move(stdPath),path{flagger.moduleNameToFile("std",options.objectDirectory())});
 			}
 			if(stdCompatInserted)
 			{
-				ModuleData data=parseModuleData(stdCompatPath);
+				ModuleData data=parseModuleData(options,stdCompatPath);
 				actually_add_file(external.files,std::move(data),std::move(stdCompatPath),path{flagger.moduleNameToFile("std.compat",options.objectDirectory())});
 			}
 		}
@@ -273,7 +273,7 @@ public:
 					{
 						path headerPath(*name);
 						path modulePath(flagger.headerNameToOutput(i.name,options.objectDirectory()));
-						auto info=actually_add_file(headers,parseModuleData(*name),std::move(headerPath),std::move(modulePath));
+						auto info=actually_add_file(headers,parseModuleData(options,*name),std::move(headerPath),std::move(modulePath));
 						it->second.recompile=info.first||options.isForceRecompile();
 						it->second.remaining=info.second;
 					}
@@ -325,7 +325,7 @@ public:
 					{
 						path headerPath(*oname);
 						path modulePath(flagger.headerNameToOutput(i.name,options.objectDirectory()));
-						auto info=actually_add_file(headers,parseModuleData(*oname),std::move(headerPath),std::move(modulePath));
+						auto info=actually_add_file(headers,parseModuleData(options,*oname),std::move(headerPath),std::move(modulePath));
 						it->second.recompile=info.first||options.isForceRecompile();
 						it->second.remaining=info.second;
 					}

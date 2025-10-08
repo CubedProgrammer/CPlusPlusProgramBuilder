@@ -1,5 +1,7 @@
 export module dependency;
 import std;
+import configuration;
+import utils;
 using namespace std;
 using std::filesystem::path;
 export enum ImportType
@@ -16,11 +18,13 @@ export struct ModuleData
 	string name;
 	vector<ImportUnit>imports;
 };
-vector<string>tokenizeData(const path&file)
+vector<string>tokenizeData(const BuildConfiguration&configuration,const path&file)
 {
 	vector<string>tokens;
 	string current;
-	ifstream fin(file.string());
+	vector<char*>preprocessCommand;
+	string fileString = file.string();
+	char preprocessOption[] = "-E";
 	bool inString=false;
 	bool inChar=false;
 	bool lastEscape=false;
@@ -33,8 +37,15 @@ vector<string>tokenizeData(const path&file)
 	bool inAngleBracket=false;
 	bool*stringOrCharPointer=nullptr;
 	size_t lc;
-	char c;
-	while(fin.get(c))
+	preprocessCommand.reserve(configuration.compilerOptions.size()+4);
+	preprocessCommand.push_back(svConstCaster(configuration.compiler()));
+	preprocessCommand.push_back(preprocessOption);
+	preprocessCommand.append_range(views::transform(configuration.compilerOptions, svConstCaster));
+	preprocessCommand.push_back(svConstCaster(fileString));
+	preprocessCommand.push_back(nullptr);
+	auto result= run_and_get_output(preprocessCommand).value().first;
+	println("dependency {} {}", fileString, result.size());
+	for(char c:result)
 	{
 		insert=!inChar&&!inString&&!inComment&&!inAngleBracket&&!inLineComment;
 		if(c=='_'||isalnum((unsigned char)c))
@@ -148,15 +159,16 @@ vector<string>tokenizeData(const path&file)
 	}
 	return tokens;
 }
-export ModuleData parseModuleData(const path&file)
+export ModuleData parseModuleData(const BuildConfiguration&configuration,const path&file)
 {
 	ModuleData md;
-	vector<string>ts=tokenizeData(file);
+	vector<string>ts=tokenizeData(configuration,file);
 	vector<string>importStatement;
 	ImportType it;
 	bool lastExport=false;
 	bool grabName=false;
 	bool importing=false;
+	println("{}",ts.size());
 	for(const string&s:ts)
 	{
 		if(grabName)

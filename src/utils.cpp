@@ -6,6 +6,10 @@ module;
 export module utils;
 import std;
 using namespace std;
+export char*svConstCaster(string_view sv)
+{
+	return const_cast<char*>(sv.data());
+}
 export optional<int>launch_program(span<char*>arguments)
 {
 	optional<int>opid;
