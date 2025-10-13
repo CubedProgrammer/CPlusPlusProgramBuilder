@@ -130,6 +130,11 @@ public:
 		noexcept
 		:CompilerConfigurer(LLVM,{})
 	{}
+	constexpr CompilerType getCompilerType()
+		const noexcept
+	{
+		return type;
+	}
 	span<const string>getIncludeDirectories()
 		const noexcept
 	{
