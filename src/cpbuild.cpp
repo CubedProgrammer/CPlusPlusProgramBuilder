@@ -134,7 +134,7 @@ public:
 		ModuleConnection&connection=externalDirectory?external:internal;
 		if(!connection.files.m.contains(p))
 		{
-			ModuleData data=parseModuleData(p);
+			ModuleData data=parseModuleData(options,p);
 			path object=externalDirectory?path{flagger.moduleNameToFile(data.name,options.objectDirectory())}:getOutputFile(p);
 			if(!object.empty())
 			{
@@ -202,12 +202,12 @@ public:
 			auto[stdCompatIt,stdCompatInserted]=external.primaryModuleInterfaceUnits.insert({"std.compat",stdPath});
 			if(stdInserted)
 			{
-				ModuleData data=parseModuleData(stdPath);
+				ModuleData data=parseModuleData(options,stdPath);
 				external.files.insert(std::move(stdPath),path{flagger.moduleNameToFile("std",options.objectDirectory())},std::move(data));
 			}
 			if(stdCompatInserted)
 			{
-				ModuleData data=parseModuleData(stdCompatPath);
+				ModuleData data=parseModuleData(options,stdCompatPath);
 				external.files.insert(std::move(stdCompatPath),path{flagger.moduleNameToFile("std.compat",options.objectDirectory())},std::move(data));
 			}
 		}
@@ -286,7 +286,7 @@ public:
 						auto headerIt=headers.m.find(headerPath);
 						if(headerIt==headers.m.end())
 						{
-							headerIt=headers.insert(std::move(headerPath),std::move(modulePath),parseModuleData(*name)).first;
+							headerIt=headers.insert(std::move(headerPath),std::move(modulePath),parseModuleData(options,*name)).first;
 						}
 						it->second.recompile=headerIt->second.source>headerIt->second.object||options.isForceRecompile();
 						it->second.remaining=headerIt->second.dependency.size();
@@ -342,7 +342,7 @@ public:
 						auto headerIt=headers.m.find(headerPath);
 						if(headerIt==headers.m.end())
 						{
-							headerIt=headers.insert(std::move(headerPath),std::move(modulePath),parseModuleData(*oname)).first;
+							headerIt=headers.insert(std::move(headerPath),std::move(modulePath),parseModuleData(options,*oname)).first;
 						}
 						it->second.recompile=headerIt->second.source>headerIt->second.object||options.isForceRecompile();
 						it->second.remaining=headerIt->second.dependency.size();

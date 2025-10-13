@@ -20,11 +20,12 @@ export struct ModuleData
 };
 vector<string>tokenizeData(const BuildConfiguration&configuration,const path&file)
 {
+	using namespace chrono;
 	vector<string>tokens;
 	string current;
 	vector<char*>preprocessCommand;
-	string fileString = file.string();
-	char preprocessOption[] = "-E";
+	string fileString=file.string();
+	char preprocessOption[]="-E";
 	bool inString=false;
 	bool inChar=false;
 	bool lastEscape=false;
@@ -43,9 +44,11 @@ vector<string>tokenizeData(const BuildConfiguration&configuration,const path&fil
 	preprocessCommand.append_range(views::transform(configuration.compilerOptions, svConstCaster));
 	preprocessCommand.push_back(svConstCaster(fileString));
 	preprocessCommand.push_back(nullptr);
+	auto start=high_resolution_clock::now();
 	auto result= run_and_get_output(preprocessCommand).value().first;
-	println("dependency {} {}", fileString, result.size());
-	for(char c:result)
+	auto end=high_resolution_clock::now();
+	println("preprocessing {}\ndependency {} {}",(end-start).count(),fileString,result.size());
+	for(char&c:result)
 	{
 		insert=!inChar&&!inString&&!inComment&&!inAngleBracket&&!inLineComment;
 		if(c=='_'||isalnum((unsigned char)c))
@@ -145,7 +148,7 @@ vector<string>tokenizeData(const BuildConfiguration&configuration,const path&fil
 		{
 			if(c=='\n')
 			{
-				current+="\\n";
+				current+=" ";
 			}
 			else
 			{
@@ -161,14 +164,18 @@ vector<string>tokenizeData(const BuildConfiguration&configuration,const path&fil
 }
 export ModuleData parseModuleData(const BuildConfiguration&configuration,const path&file)
 {
+	using namespace chrono;
 	ModuleData md;
+	auto start=high_resolution_clock::now();
 	vector<string>ts=tokenizeData(configuration,file);
+	auto end=high_resolution_clock::now();
 	vector<string>importStatement;
 	ImportType it;
 	bool lastExport=false;
 	bool grabName=false;
 	bool importing=false;
-	println("{}",ts.size());
+	println("tokenize {}\n{}",(end-start).count(),ts.size());
+	start=high_resolution_clock::now();
 	for(const string&s:ts)
 	{
 		if(grabName)
@@ -250,5 +257,7 @@ export ModuleData parseModuleData(const BuildConfiguration&configuration,const p
 			importing=true;
 		}
 	}
+	end=high_resolution_clock::now();
+	println("parse {}",(end-start).count());
 	return md;
 }
