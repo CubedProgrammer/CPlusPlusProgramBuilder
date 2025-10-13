@@ -4,7 +4,7 @@ import cpbuild;
 import flag;
 constexpr unsigned MAJOR=0;
 constexpr unsigned MINOR=2;
-constexpr unsigned PATCH=5;
+constexpr unsigned PATCH=6;
 using namespace std;
 using filesystem::current_path;
 int mainpp(span<string_view>args)
