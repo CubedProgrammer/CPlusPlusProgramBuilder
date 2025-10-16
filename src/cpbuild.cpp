@@ -132,12 +132,15 @@ public:
 	void add_file(path&&p,bool externalDirectory=false)
 	{
 		ModuleConnection&connection=externalDirectory?external:internal;
+		println("{} {} {}",externalDirectory,p.string(),connection.files.m.contains(p));
 		if(!connection.files.m.contains(p))
 		{
 			ModuleData data=parseModuleData(options,p);
 			path object=externalDirectory?path{flagger.moduleNameToFile(data.name,options.objectDirectory())}:getOutputFile(p);
+			println("adding file {} {}",object.string(),p.string());
 			if(!object.empty())
 			{
+				println("actually adding file {}",p.string());
 				connection.primaryModuleInterfaceUnits.emplace(data.name,p);
 				connection.files.insert(std::move(p),std::move(object),std::move(data));
 			}

@@ -22,7 +22,6 @@ vector<string>tokenizeData(const BuildConfiguration&configuration,const path&fil
 {
 	using namespace chrono;
 	vector<string>tokens;
-	string current;
 	vector<char*>preprocessCommand;
 	string fileString=file.string();
 	char preprocessOption[]="-E";
@@ -43,13 +42,17 @@ vector<string>tokenizeData(const BuildConfiguration&configuration,const path&fil
 	preprocessCommand.push_back(preprocessOption);
 	preprocessCommand.append_range(views::transform(configuration.compilerOptions, svConstCaster));
 	preprocessCommand.push_back(svConstCaster(fileString));
+	println("{}",preprocessCommand);
 	preprocessCommand.push_back(nullptr);
 	auto start=high_resolution_clock::now();
 	auto result= run_and_get_output(preprocessCommand).value().first;
 	auto end=high_resolution_clock::now();
 	println("preprocessing {}\ndependency {} {}",(end-start).count(),fileString,result.size());
+	size_t currentIndex=0;
+	size_t beginIndex=0;
 	for(char&c:result)
 	{
+		string_view current(result.begin()+beginIndex,result.begin()+currentIndex);
 		insert=!inChar&&!inString&&!inComment&&!inAngleBracket&&!inLineComment;
 		if(c=='_'||isalnum((unsigned char)c))
 		{
@@ -91,13 +94,16 @@ vector<string>tokenizeData(const BuildConfiguration&configuration,const path&fil
 		{
 			if(!inLineComment&&!inComment)
 			{
-				insert=false;
-				stringOrCharPointer=c=='\''?&inChar:&inString;
-				if(((stringOrCharPointer==&inChar&&!inString)||(stringOrCharPointer==&inString&&!inChar))&&!lastEscape)
+				if(inChar||c!='\''||result[currentIndex-1]>'9'||result[currentIndex-1]<'0')
 				{
-					*stringOrCharPointer=!*stringOrCharPointer;
-					insert=*stringOrCharPointer;
-					isQuoted=!insert;
+					insert=false;
+					stringOrCharPointer=c=='\''?&inChar:&inString;
+					if(((stringOrCharPointer==&inChar&&!inString)||(stringOrCharPointer==&inString&&!inChar))&&!lastEscape)
+					{
+						*stringOrCharPointer=!*stringOrCharPointer;
+						insert=*stringOrCharPointer;
+						isQuoted=!insert;
+					}
 				}
 			}
 		}
@@ -110,17 +116,17 @@ vector<string>tokenizeData(const BuildConfiguration&configuration,const path&fil
 		{
 			if(current.size()>=2)
 			{
-				if(current.find("*/")==current.size()-2)
+				if(current.ends_with("*/"))
 				{
 					insert=true;
 					inComment=false;
 				}
-				else if(current.find("/*")==current.size()-2)
+				else if(current.ends_with("/*"))
 				{
 					insert=true;
 					inComment=true;
 				}
-				else if(current.find("//")==current.size()-2)
+				else if(current.ends_with("//"))
 				{
 					inLineComment=true;
 				}
@@ -139,8 +145,8 @@ vector<string>tokenizeData(const BuildConfiguration&configuration,const path&fil
 		}
 		if(insert&&current.size())
 		{
-			tokens.push_back(std::move(current));
-			current=string();
+			tokens.push_back(result.substr(beginIndex,currentIndex-beginIndex));
+			beginIndex=currentIndex;
 			insert=false;
 			isQuoted=false;
 		}
@@ -148,17 +154,18 @@ vector<string>tokenizeData(const BuildConfiguration&configuration,const path&fil
 		{
 			if(c=='\n')
 			{
-				current+=" ";
-			}
-			else
-			{
-				current+=c;
+				c=' ';
 			}
 		}
+		else
+		{
+			++beginIndex;
+		}
+		++currentIndex;
 	}
-	if(current.size())
+	if(currentIndex>beginIndex)
 	{
-		tokens.push_back(std::move(current));
+		tokens.push_back(result.substr(beginIndex,currentIndex-beginIndex));
 	}
 	return tokens;
 }
@@ -176,6 +183,13 @@ export ModuleData parseModuleData(const BuildConfiguration&configuration,const p
 	bool importing=false;
 	println("tokenize {}\n{}",(end-start).count(),ts.size());
 	start=high_resolution_clock::now();
+	/*if(file.filename()=="test-tokenize.txt")
+	{
+		for(const string&s:ts)
+		{
+			println("{}",s);
+		}
+	}*/
 	for(const string&s:ts)
 	{
 		if(grabName)
@@ -259,5 +273,6 @@ export ModuleData parseModuleData(const BuildConfiguration&configuration,const p
 	}
 	end=high_resolution_clock::now();
 	println("parse {}",(end-start).count());
+	println("{} imports {}",md.name,views::transform(md.imports,&ImportUnit::name));
 	return md;
 }
