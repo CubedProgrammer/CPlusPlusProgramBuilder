@@ -14,23 +14,24 @@ constexpr string_view CBP_GCC="g++";
 export struct ModuleCompilation
 {
 	vector<ImportUnit>dependency;
+	path preprocessed;
 	path output;
 	file_time_type source;
 	file_time_type object;
 	vector<unsigned>dependentProcesses;
 	string name;
 	ModuleCompilation()=default;
-	ModuleCompilation(ModuleData data,file_time_type sourceModify,path out)
-		:dependency(std::move(data.imports)),output(std::move(out)),source(sourceModify),object(exists(output)?last_write_time(output):sourceModify-1s),dependentProcesses(),name(std::move(data.name))
+	ModuleCompilation(ModuleData data,file_time_type sourceModify,path preprocessed,path out)
+		:dependency(std::move(data.imports)),preprocessed(std::move(preprocessed)),output(std::move(out)),source(sourceModify),object(exists(output)?last_write_time(output):sourceModify-1s),dependentProcesses(),name(std::move(data.name))
 	{}
 };
 export struct FileModuleMap
 {
 	unordered_map<path,ModuleCompilation>m;
-	auto insert(path in,path out,ModuleData data)
+	auto insert(path in,path out,path preprocessed,ModuleData data)
 	{
 		const file_time_type lastModify=last_write_time(in);
-		return m.emplace(std::move(in),ModuleCompilation(std::move(data),lastModify,std::move(out)));
+		return m.emplace(std::move(in),ModuleCompilation(std::move(data),lastModify,std::move(preprocessed),std::move(out)));
 	}
 };
 export struct ModuleConnection
@@ -91,22 +92,7 @@ public:
 	path getOutputFile(path p)
 		const noexcept
 	{
-		if(p.has_extension())
-		{
-			p.replace_extension(path{"o"});
-		}
-		if(options.objectDirectory().size())
-		{
-			if(options.targets.size()==1)
-			{
-				string pathString=p.string();
-				size_t index=pathString.rfind('/')+1;
-				string_view sv{pathString.cbegin()+index,pathString.cend()};
-				p=sv;
-			}
-			p=path{options.objectDirectory()}/p;
-		}
-		return p;
+		return replaceMove(options,std::move(p),path{"o"});
 	}
 	path getFinalOutputFile()
 		const noexcept
@@ -135,14 +121,15 @@ public:
 		println("{} {} {}",externalDirectory,p.string(),connection.files.m.contains(p));
 		if(!connection.files.m.contains(p))
 		{
-			ModuleData data=parseModuleData(options,p);
+			path preprocessed=preprocess(options,p);
+			ModuleData data=parseModuleData(options,preprocessed);
 			path object=externalDirectory?path{flagger.moduleNameToFile(data.name,options.objectDirectory())}:getOutputFile(p);
 			println("adding file {} {}",object.string(),p.string());
 			if(!object.empty())
 			{
 				println("actually adding file {}",p.string());
 				connection.primaryModuleInterfaceUnits.emplace(data.name,p);
-				connection.files.insert(std::move(p),std::move(object),std::move(data));
+				connection.files.insert(std::move(p),std::move(object),std::move(preprocessed),std::move(data));
 			}
 		}
 	}
@@ -206,12 +193,14 @@ public:
 			if(stdInserted)
 			{
 				ModuleData data=parseModuleData(options,stdPath);
-				external.files.insert(std::move(stdPath),path{flagger.moduleNameToFile("std",options.objectDirectory())},std::move(data));
+				path pp=replaceMove(options,stdPath,path{"ii"});
+				external.files.insert(std::move(stdPath),path{flagger.moduleNameToFile("std",options.objectDirectory())},pp,std::move(data));
 			}
 			if(stdCompatInserted)
 			{
 				ModuleData data=parseModuleData(options,stdCompatPath);
-				external.files.insert(std::move(stdCompatPath),path{flagger.moduleNameToFile("std.compat",options.objectDirectory())},std::move(data));
+				path pp=replaceMove(options,stdCompatPath,path{"ii"});
+				external.files.insert(std::move(stdCompatPath),path{flagger.moduleNameToFile("std.compat",options.objectDirectory())},pp,std::move(data));
 			}
 		}
 		else
@@ -259,12 +248,14 @@ public:
 					if(isExternal)
 					{
 						auto externalIt=external.primaryModuleInterfaceUnits.find(i.name);
+						println("external dependency {}",i.name);
 						if(externalIt!=external.primaryModuleInterfaceUnits.end())
 						{
 							path namepath(externalIt->second);
 							name=namepath.string();
 							if(externalImportVisited.insert(namepath).second)
 							{
+								println("queued up");
 								externalImports.push(std::move(namepath));
 							}
 						}
@@ -289,7 +280,7 @@ public:
 						auto headerIt=headers.m.find(headerPath);
 						if(headerIt==headers.m.end())
 						{
-							headerIt=headers.insert(std::move(headerPath),std::move(modulePath),parseModuleData(options,*name)).first;
+							headerIt=headers.insert(std::move(headerPath),std::move(modulePath),path{},parseModuleData(options,*name)).first;
 						}
 						it->second.recompile=headerIt->second.source>headerIt->second.object||options.isForceRecompile();
 						it->second.remaining=headerIt->second.dependency.size();
@@ -345,7 +336,7 @@ public:
 						auto headerIt=headers.m.find(headerPath);
 						if(headerIt==headers.m.end())
 						{
-							headerIt=headers.insert(std::move(headerPath),std::move(modulePath),parseModuleData(options,*oname)).first;
+							headerIt=headers.insert(std::move(headerPath),std::move(modulePath),path{},parseModuleData(options,*oname)).first;
 						}
 						it->second.recompile=headerIt->second.source>headerIt->second.object||options.isForceRecompile();
 						it->second.remaining=headerIt->second.dependency.size();
@@ -356,6 +347,7 @@ public:
 		queue<ForwardGraphNode>compileQueue;
 		for(const auto&[node,edges]:graph)
 		{
+			println("graph contains {} {}",node.name,edges.remaining);
 			if(edges.remaining==0)
 			{
 				compileQueue.push(node);
@@ -381,15 +373,27 @@ public:
 						println("Compiling {}",node.name);
 					}
 					string outputfile=node.external&&!node.header?"/dev/null":mc.output.string();
+					const path&pp=(node.external?external.files:internal.files).m.at(path{node.name}).preprocessed;
+					string pps=pp.string();
+					bool exchange=pps.size();
+					if(exchange)
+					{
+						swap(pps,node.name);
+					}
+					println("true target is {}",node.name);
 					auto arguments=flagger.compileFile(node.name,outputfile,mc.name,mc.dependency,options,node.notInterface,node.header);
 					auto opid=pm.run(arguments,options.isDisplayCommand());
+					if(exchange)
+					{
+						swap(pps,node.name);
+					}
 					if(opid)
 					{
 						processToNode.insert({*opid,std::move(node)});
 					}
 					else
 					{
-						println("Compiling {} failed",node.name);
+						println(cerr,"Compiling {} failed",node.name);
 					}
 				}
 				else if(options.isDisplayCommand())
@@ -403,6 +407,7 @@ public:
 					otherData.remaining-=!data.recompile;
 					if(otherData.remaining==0)
 					{
+						println("pushing {} onto the queue",other.name);
 						compileQueue.push(other);
 					}
 				}
@@ -419,6 +424,7 @@ public:
 						ForwardGraphNodeData&otherData=graph.at(other);
 						if(--otherData.remaining==0)
 						{
+							println("pushing {} onto the queue",other.name);
 							compileQueue.push(other);
 						}
 					}

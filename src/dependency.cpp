@@ -18,13 +18,65 @@ export struct ModuleData
 	string name;
 	vector<ImportUnit>imports;
 };
+export path replaceMove(const BuildConfiguration options,path file,const path&extension)
+{
+	if(file.has_extension())
+	{
+		file.replace_extension(extension);
+	}
+	if(options.objectDirectory().size())
+	{
+		if(options.targets.size()==1)
+		{
+			string pathString=file.string();
+			size_t index=pathString.rfind('/')+1;
+			string_view sv{pathString.cbegin()+index,pathString.cend()};
+			file=sv;
+		}
+		file=path{options.objectDirectory()}/file;
+	}
+	return file;
+}
+export path preprocess(const BuildConfiguration&options,const path&file)
+{
+	path out=replaceMove(options,file,path{"ii"});
+	string fileString=file.string();
+	string outString=out.string();
+	char preprocessOption[]="-E";
+	char outOption[]="-o";
+	vector<char*>preprocessCommand;
+	preprocessCommand.reserve(options.compilerOptions.size()+4);
+	preprocessCommand.push_back(svConstCaster(options.compiler()));
+	preprocessCommand.push_back(preprocessOption);
+	preprocessCommand.append_range(views::transform(options.compilerOptions,svConstCaster));
+	preprocessCommand.push_back(svConstCaster(fileString));
+	preprocessCommand.push_back(outOption);
+	preprocessCommand.push_back(svConstCaster(outString));
+	println("{}",preprocessCommand);
+	preprocessCommand.push_back(nullptr);
+	auto pid=launch_program(preprocessCommand);
+	if(!pid)
+	{
+		println(cerr,"preprocessing {} failed",fileString);
+	}
+	return out;
+}
+string readEntireFile(const path&name)
+{
+	string s;
+	array<char,8192>buf;
+	ifstream fin(name.string());
+	while(fin)
+	{
+		size_t c=fin.read(buf.data(),buf.size()).gcount();
+		s.append_range(views::take(buf,c));
+	}
+	return s;
+}
 vector<string>tokenizeData(const BuildConfiguration&configuration,const path&file)
 {
 	using namespace chrono;
 	vector<string>tokens;
-	vector<char*>preprocessCommand;
-	string fileString=file.string();
-	char preprocessOption[]="-E";
 	bool inString=false;
 	bool inChar=false;
 	bool lastEscape=false;
@@ -36,20 +88,19 @@ vector<string>tokenizeData(const BuildConfiguration&configuration,const path&fil
 	bool isQuoted=false;
 	bool inAngleBracket=false;
 	bool*stringOrCharPointer=nullptr;
+	string result=readEntireFile(file);
 	size_t lc;
-	preprocessCommand.reserve(configuration.compilerOptions.size()+4);
-	preprocessCommand.push_back(svConstCaster(configuration.compiler()));
-	preprocessCommand.push_back(preprocessOption);
-	preprocessCommand.append_range(views::transform(configuration.compilerOptions, svConstCaster));
-	preprocessCommand.push_back(svConstCaster(fileString));
-	println("{}",preprocessCommand);
-	preprocessCommand.push_back(nullptr);
-	auto start=high_resolution_clock::now();
+	/*auto start=high_resolution_clock::now();
 	auto result= run_and_get_output(preprocessCommand).value().first;
 	auto end=high_resolution_clock::now();
-	println("preprocessing {}\ndependency {} {}",(end-start).count(),fileString,result.size());
+	println("preprocessing {}\ndependency {} {}",(end-start).count(),fileString,result.size());*/
 	size_t currentIndex=0;
 	size_t beginIndex=0;
+	if(file.filename()=="std.ii")
+	{
+		println("std {}",file.string());
+		erase(result,'\'');
+	}
 	for(char&c:result)
 	{
 		string_view current(result.begin()+beginIndex,result.begin()+currentIndex);
