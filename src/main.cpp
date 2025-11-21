@@ -1,6 +1,7 @@
 import std;
 import configuration;
 import cpbuild;
+import dependency;
 import flag;
 constexpr unsigned MAJOR=0;
 constexpr unsigned MINOR=2;
@@ -59,6 +60,8 @@ int mainpp(span<string_view>args)
 		}
 		ProgramBuilder&builder=ProgramBuilder::getInstance(std::move(ci),std::move(configuration));
 		builder.cpbuild();
+		/*ModuleData data=parseModuleData(configuration,filesystem::path{"debug/std.ii"});
+		println("data.name {}",data.name);*/
 	}
 	return 0;
 }
