@@ -52,7 +52,6 @@ export path preprocess(const BuildConfiguration&options,const path&file)
 	preprocessCommand.push_back(svConstCaster(fileString));
 	preprocessCommand.push_back(outOption);
 	preprocessCommand.push_back(svConstCaster(outString));
-	println("{}",preprocessCommand);
 	preprocessCommand.push_back(nullptr);
 	auto pid=launch_program(preprocessCommand);
 	if(pid)
@@ -98,10 +97,6 @@ vector<string>tokenizeData(const BuildConfiguration&configuration,const path&fil
 	bool*stringOrCharPointer=nullptr;
 	string result=readEntireFile(file);
 	size_t lc;
-	/*auto start=high_resolution_clock::now();
-	auto result= run_and_get_output(preprocessCommand).value().first;
-	auto end=high_resolution_clock::now();
-	println("preprocessing {}\ndependency {} {}",(end-start).count(),fileString,result.size());*/
 	size_t currentIndex=0;
 	size_t beginIndex=0;
 	for(char&c:result)
@@ -235,16 +230,7 @@ export ModuleData parseModuleData(const BuildConfiguration&configuration,const p
 	bool lastExport=false;
 	bool grabName=false;
 	bool importing=false;
-	println("tokenize {}\n{}",(end-start).count(),ts.size());
 	start=high_resolution_clock::now();
-	/*if(file.filename()=="std.ii")
-	{
-		ofstream ofs("stdtoken.txt");
-		for(const string&s:ts)
-		{
-			println(ofs,"{}",s);
-		}
-	}*/
 	for(const string&s:ts)
 	{
 		if(grabName)
@@ -327,7 +313,5 @@ export ModuleData parseModuleData(const BuildConfiguration&configuration,const p
 		}
 	}
 	end=high_resolution_clock::now();
-	println("parse {}",(end-start).count());
-	println("{} {} imports {}",file.string(),md.name,views::transform(md.imports,&ImportUnit::name));
 	return md;
 }

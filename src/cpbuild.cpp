@@ -118,16 +118,13 @@ public:
 	void add_file(path&&p,bool externalDirectory=false)
 	{
 		ModuleConnection&connection=externalDirectory?external:internal;
-		println("{} {} {}",externalDirectory,p.string(),connection.files.m.contains(p));
 		if(!connection.files.m.contains(p))
 		{
 			path preprocessed=preprocess(options,p);
 			ModuleData data=parseModuleData(options,preprocessed);
 			path object=externalDirectory?path{flagger.moduleNameToFile(data.name,options.objectDirectory())}:getOutputFile(p);
-			println("adding file {} {}",object.string(),p.string());
 			if(!object.empty())
 			{
-				println("actually adding file {}",p.string());
 				connection.primaryModuleInterfaceUnits.emplace(data.name,p);
 				connection.files.insert(std::move(p),std::move(object),std::move(preprocessed),std::move(data));
 			}
@@ -248,14 +245,12 @@ public:
 					if(isExternal)
 					{
 						auto externalIt=external.primaryModuleInterfaceUnits.find(i.name);
-						println("external dependency {}",i.name);
 						if(externalIt!=external.primaryModuleInterfaceUnits.end())
 						{
 							path namepath(externalIt->second);
 							name=namepath.string();
 							if(externalImportVisited.insert(namepath).second)
 							{
-								println("queued up");
 								externalImports.push(std::move(namepath));
 							}
 						}
@@ -347,7 +342,6 @@ public:
 		queue<ForwardGraphNode>compileQueue;
 		for(const auto&[node,edges]:graph)
 		{
-			println("graph contains {} {}",node.name,edges.remaining);
 			if(edges.remaining==0)
 			{
 				compileQueue.push(node);
@@ -380,7 +374,6 @@ public:
 					{
 						swap(pps,node.name);
 					}
-					println("true target is {}",node.name);
 					auto arguments=flagger.compileFile(node.name,outputfile,mc.name,mc.dependency,options,node.notInterface,node.header);
 					auto opid=pm.run(arguments,options.isDisplayCommand());
 					if(exchange)
@@ -407,7 +400,6 @@ public:
 					otherData.remaining-=!data.recompile;
 					if(otherData.remaining==0)
 					{
-						println("pushing {} onto the queue",other.name);
 						compileQueue.push(other);
 					}
 				}
@@ -424,7 +416,6 @@ public:
 						ForwardGraphNodeData&otherData=graph.at(other);
 						if(--otherData.remaining==0)
 						{
-							println("pushing {} onto the queue",other.name);
 							compileQueue.push(other);
 						}
 					}
