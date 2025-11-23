@@ -33,18 +33,20 @@ export path replaceMove(const BuildConfiguration options,path file,const path&ex
 			string_view sv{pathString.cbegin()+index,pathString.cend()};
 			file=sv;
 		}
-		file=path{options.objectDirectory()}/file;
+		file=path{options.objectDirectory()}/file.relative_path();
 	}
 	return file;
 }
-export path preprocess(const BuildConfiguration&options,const path&file)
+export optional<path>preprocess(const BuildConfiguration&options,const path&file)
 {
+	optional<path>outOpt;
 	path out=replaceMove(options,file,path{"ii"});
 	string fileString=file.string();
 	string outString=out.string();
 	char preprocessOption[]="-E";
 	char outOption[]="-o";
 	vector<char*>preprocessCommand;
+	create_directories(out.parent_path());
 	preprocessCommand.reserve(options.compilerOptions.size()+4);
 	preprocessCommand.push_back(svConstCaster(options.compiler()));
 	preprocessCommand.push_back(preprocessOption);
@@ -61,12 +63,16 @@ export path preprocess(const BuildConfiguration&options,const path&file)
 		{
 			println(cerr,"preprocessing {} failed with exit code {}",fileString,res->second);
 		}
+		else
+		{
+			outOpt=std::move(out);
+		}
 	}
 	else
 	{
 		println(cerr,"preprocessing {} failed",fileString);
 	}
-	return out;
+	return outOpt;
 }
 string readEntireFile(const path&name)
 {

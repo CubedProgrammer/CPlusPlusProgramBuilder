@@ -120,13 +120,14 @@ public:
 		ModuleConnection&connection=externalDirectory?external:internal;
 		if(!connection.files.m.contains(p))
 		{
-			path preprocessed=preprocess(options,p);
-			ModuleData data=parseModuleData(options,preprocessed);
+			optional<path>preprocessed=preprocess(options,p);
+			path toscan=preprocessed?std::move(*preprocessed):path{p};
+			ModuleData data=parseModuleData(options,toscan);
 			path object=externalDirectory?path{flagger.moduleNameToFile(data.name,options.objectDirectory())}:getOutputFile(p);
 			if(!object.empty())
 			{
 				connection.primaryModuleInterfaceUnits.emplace(data.name,p);
-				connection.files.insert(std::move(p),std::move(object),std::move(preprocessed),std::move(data));
+				connection.files.insert(std::move(p),std::move(object),std::move(toscan),std::move(data));
 			}
 		}
 	}
@@ -161,6 +162,7 @@ public:
 	{
 		span<string_view>targets=options.targets;
 		flagger.addArguments(options);
+		println("{}",targets);
 		for(path t:targets)
 		{
 			if(is_directory(t))
@@ -238,6 +240,7 @@ public:
 			{
 				optional<string>name;
 				bool isExternal=false;
+				println("{} imports {}",filepath.string(),i.name);
 				if(i.type==MODULE)
 				{
 					auto interfaceIt=internal.primaryModuleInterfaceUnits.find(i.name);
@@ -263,6 +266,7 @@ public:
 				else
 				{
 					name=flagger.findHeader(filepath,i.name,i.type==LOCAL_HEADER);
+					println("{} is {}",i.name,name.value());
 				}
 				if(name)
 				{
@@ -367,7 +371,8 @@ public:
 						println("Compiling {}",node.name);
 					}
 					string outputfile=node.external&&!node.header?"/dev/null":mc.output.string();
-					const path&pp=(node.external?external.files:internal.files).m.at(path{node.name}).preprocessed;
+					path emptypath;
+					const path&pp=node.header?emptypath:(node.external?external.files:internal.files).m.at(path{node.name}).preprocessed;
 					string pps=pp.string();
 					bool exchange=pps.size();
 					if(exchange)
