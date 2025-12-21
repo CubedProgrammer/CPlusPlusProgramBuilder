@@ -9,8 +9,6 @@ using std::filesystem::current_path,std::filesystem::file_time_type,std::filesys
 using namespace std;
 using namespace chrono_literals;
 constexpr string_view CBP_ALLOWED_EXTENSIONS="c++ c++m cc ccm cpp cppm cxx cxxm";
-constexpr string_view CBP_CLANG="clang++";
-constexpr string_view CBP_GCC="g++";
 export struct ModuleCompilation
 {
 	vector<ImportUnit>dependency;
@@ -121,13 +119,16 @@ public:
 		if(!connection.files.m.contains(p))
 		{
 			optional<path>preprocessed=preprocess(options,p);
-			path toscan=preprocessed?std::move(*preprocessed):path{p};
-			ModuleData data=parseModuleData(options,toscan);
-			path object=externalDirectory?path{flagger.moduleNameToFile(data.name,options.objectDirectory())}:getOutputFile(p);
-			if(!object.empty())
+			if(preprocessed)
 			{
-				connection.primaryModuleInterfaceUnits.emplace(data.name,p);
-				connection.files.insert(std::move(p),std::move(object),std::move(toscan),std::move(data));
+				path toscan=std::move(*preprocessed);
+				ModuleData data=parseModuleData(options,toscan);
+				path object=externalDirectory?path{flagger.moduleNameToFile(data.name,options.objectDirectory())}:getOutputFile(p);
+				if(!object.empty())
+				{
+					connection.primaryModuleInterfaceUnits.emplace(data.name,p);
+					connection.files.insert(std::move(p),std::move(object),std::move(toscan),std::move(data));
+				}
 			}
 		}
 	}
@@ -156,6 +157,28 @@ public:
 		for(const path&d:directoriesToCreate)
 		{
 			create_directory(d);
+		}
+	}
+	void cacheDependencies()
+		const
+	{
+		ofstream ofs(string{options.dependencyCache()});
+		for(const auto&[filepath,mc]:internal.files.m)
+		{
+			println(ofs,"{}",filepath.string());
+			for(const auto&i:mc.dependency)
+			{
+				auto it = internal.primaryModuleInterfaceUnits.find(i.name);
+				if(it!=internal.primaryModuleInterfaceUnits.end())
+				{
+					println(ofs,"{},{}",i.name,it->second.string());
+				}
+				else
+				{
+					println(ofs,"{},{}",i.name,external.primaryModuleInterfaceUnits.at(i.name).string());
+				}
+			}
+			print(ofs,"\n");
 		}
 	}
 	void cpbuild()
@@ -222,6 +245,10 @@ public:
 				println("{}\n{}",p.string(),ranges::to<string>(importstr));
 			}
 		}
+		if(options.dependencyCache().size())
+		{
+			cacheDependencies();
+		}
 		queue<path>externalImports;
 		unordered_set<path>externalImportVisited;
 		FileModuleMap headers;
@@ -240,7 +267,7 @@ public:
 			{
 				optional<string>name;
 				bool isExternal=false;
-				println("{} imports {}",filepath.string(),i.name);
+				//println("{} imports {}",filepath.string(),i.name);
 				if(i.type==MODULE)
 				{
 					auto interfaceIt=internal.primaryModuleInterfaceUnits.find(i.name);

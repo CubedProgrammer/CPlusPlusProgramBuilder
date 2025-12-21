@@ -13,7 +13,7 @@ constexpr char LONG_OPTION_FLAG='-';
 export constexpr string_view CBP_COMPILER_NAME="c++";
 export struct BuildConfiguration
 {
-	array<string_view,4>svOptions;
+	array<string_view,5>svOptions;
 	span<string_view>compilerOptions;
 	span<string_view>linkerOptions;
 	uint8_t binaryOptions;
@@ -113,6 +113,11 @@ export struct BuildConfiguration
 		noexcept
 	{
 		return self.svOptions[3];
+	}
+	constexpr decltype(auto)dependencyCache(this auto&self)
+		noexcept
+	{
+		return self.svOptions[4];
 	}
 };
 string read_option_file(string_view fname)
@@ -243,6 +248,17 @@ export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 						else if(flagname=="display-dependency-graph")
 						{
 							configuration.setDumpDependencyGraph();
+						}
+						else if(flagname.starts_with("dependency-cache"))
+						{
+							if(flagname.size()>16)
+							{
+								configuration.dependencyCache()=flagname.substr(17);
+							}
+							else
+							{
+								configuration.dependencyCache()="C++ProgramBuilder.cache";
+							}
 						}
 						else
 						{
