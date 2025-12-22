@@ -159,13 +159,51 @@ public:
 			create_directory(d);
 		}
 	}
+	void parseDependencies(istream&in)
+	{
+		string ln;
+		string current;
+		while(getline(in,ln))
+		{
+			if(ln.size()>0)
+			{
+				size_t ind=ln.find(',');
+				if(ind==string::npos)
+				{
+					current=std::move(ln);
+				}
+				else
+				{
+					string name(ln.substr(0,ind));
+					string path(ln.substr(ind+1));
+				}
+			}
+		}
+	}
+	bool loadedDependencies()
+	{
+		bool loaded=false;
+		if(options.dependencyCache().size())
+		{
+			ifstream ifs(static_cast<string>(options.dependencyCache()));
+			loaded=ifs.is_open();
+			if(loaded)
+			{
+				parseDependencies(ifs);
+			}
+		}
+		return loaded;
+	}
 	void cacheDependencies()
 		const
 	{
+		constexpr char OPENING='[';
+		constexpr char CLOSING=']';
 		ofstream ofs(string{options.dependencyCache()});
 		for(const auto&[filepath,mc]:internal.files.m)
 		{
-			println(ofs,"{}",filepath.string());
+			println(ofs,"{}\n{}",mc.name,OPENING);
+			println(ofs,"{}\nfalse",filepath.string());
 			for(const auto&i:mc.dependency)
 			{
 				auto it = internal.primaryModuleInterfaceUnits.find(i.name);
@@ -178,7 +216,7 @@ public:
 					println(ofs,"{},{}",i.name,external.primaryModuleInterfaceUnits.at(i.name).string());
 				}
 			}
-			print(ofs,"\n");
+			print(ofs,"{}\n",CLOSING);
 		}
 	}
 	void cpbuild()
