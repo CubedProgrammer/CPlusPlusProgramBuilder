@@ -1,8 +1,5 @@
 export module flag;
-import std;
-import configuration;
-import dependency;
-import utils;
+export import dependency;
 using namespace std;
 using namespace literals;
 using filesystem::path;

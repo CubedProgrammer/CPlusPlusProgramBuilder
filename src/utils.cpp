@@ -4,7 +4,7 @@ module;
 #include<sys/wait.h>
 #include<unistd.h>
 export module utils;
-import std;
+export import std;
 using namespace std;
 export char*svConstCaster(string_view sv)
 {

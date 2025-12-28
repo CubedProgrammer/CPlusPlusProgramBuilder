@@ -1,7 +1,6 @@
 export module dependency;
-import std;
-import configuration;
-import utils;
+export import configuration;
+export import utils;
 using namespace std;
 using std::filesystem::path;
 export enum ImportType

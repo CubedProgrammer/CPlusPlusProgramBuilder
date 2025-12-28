@@ -1,5 +1,5 @@
 export module configuration;
-import std;
+export import std;
 using namespace std;
 export constexpr char COMPILER_OPTION_FLAG='c';
 export constexpr char LINKER_OPTION_FLAG='l';

@@ -1,6 +1,5 @@
 export module process;
-import std;
-import utils;
+export import utils;
 using namespace std;
 export class ParallelProcessManager
 {

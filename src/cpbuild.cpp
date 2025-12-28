@@ -1,9 +1,6 @@
 export module cpbuild;
-import std;
-import configuration;
-import dependency;
-import flag;
-import process;
+export import flag;
+export import process;
 using std::chrono::file_clock;
 using std::filesystem::current_path,std::filesystem::file_time_type,std::filesystem::path,std::filesystem::recursive_directory_iterator;
 using namespace std;

@@ -1,7 +1,5 @@
 import std;
-import configuration;
 import cpbuild;
-import flag;
 constexpr unsigned MAJOR=0;
 constexpr unsigned MINOR=3;
 constexpr unsigned PATCH=0;
