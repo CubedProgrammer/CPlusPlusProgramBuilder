@@ -1,5 +1,5 @@
 export module cpbuild;
-export import flag;
+export import graph;
 export import process;
 using std::chrono::file_clock;
 using std::filesystem::current_path,std::filesystem::file_time_type,std::filesystem::path,std::filesystem::recursive_directory_iterator;
@@ -73,11 +73,12 @@ class ProgramBuilder
 	ModuleConnection external;
 	ForwardGraph graph;
 	CompilerConfigurer flagger;
+	ProjectGraph back;
 	ParallelProcessManager pm;
 public:
 	ProgramBuilder(ProgramBuilderConstructorTag,pair<CompilerType,vector<string>>tai,BuildConfiguration op)
 		noexcept
-		:options(std::move(op)),linkerArguments(),internal(),graph(),flagger(tai.first,std::move(tai.second)),pm(op.threadCount)
+		:options(std::move(op)),linkerArguments(),internal(),graph(),flagger(tai.first,std::move(tai.second)),back(options,flagger),pm(op.threadCount)
 	{}
 	ProgramBuilder()=delete;
 	ProgramBuilder(const ProgramBuilder&)=delete;
@@ -112,6 +113,7 @@ public:
 	}
 	void add_file(path&&p,bool externalDirectory=false)
 	{
+		back.addFile(p,externalDirectory);
 		ModuleConnection&connection=externalDirectory?external:internal;
 		if(!connection.files.m.contains(p))
 		{
@@ -283,6 +285,11 @@ public:
 		if(options.dependencyCache().size())
 		{
 			cacheDependencies();
+		}
+		back.convertDependenciesToPath();
+		for(const auto&[p,data]:back)
+		{
+			println("{} {}",p,views::transform(data.depend,&ImportUnit::name));
 		}
 		queue<path>externalImports;
 		unordered_set<path>externalImportVisited;

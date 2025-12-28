@@ -17,7 +17,7 @@ export struct ModuleData
 	string name;
 	vector<ImportUnit>imports;
 };
-export path replaceMove(const BuildConfiguration options,path file,const path&extension)
+export path replaceMove(const BuildConfiguration&options,path file,const path&extension)
 {
 	if(file.has_extension())
 	{

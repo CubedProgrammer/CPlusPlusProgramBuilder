@@ -18,6 +18,12 @@ export class ProjectGraph
 	const BuildConfiguration*configuration;
 	const CompilerConfigurer*flagger;
 public:
+	ProjectGraph(const BuildConfiguration&configuration,const CompilerConfigurer&flagger)
+		:moduleToFile(),files(),configuration(&configuration),flagger(&flagger)
+	{}
+	ProjectGraph()
+		:moduleToFile(),files(),configuration(),flagger()
+	{}
 	void addFile(path p,bool external)
 	{
 		auto[it,success]=files.insert({p.string(),{}});
@@ -37,15 +43,60 @@ public:
 					it->second={std::move(moduleData.name),std::move(*preprocessedFile),std::move(object),std::move(moduleData.imports),external};
 				}
 			}
+			else
+			{
+				files.erase(it);
+			}
 		}
 	}
 	void convertDependenciesToPath()
 	{
 		for(auto&[pathString,data]:files)
 		{
-			auto nameOnly=views::transform(data.depend,&ImportUnit::name);
-			ranges::transform(filter(data.depend,[](const ImportUnit&unit){return unit.type==MODULE;}),nameOnly.begin(),[this](const string&u){return moduleToFile.at(u);},&ImportUnit::name);
+			for(auto&unit:data.depend)
+			{
+				if(unit.type==MODULE)
+				{
+					auto it=moduleToFile.find(unit.name);
+					if(it!=moduleToFile.end())
+					{
+						unit.name=it->second;
+					}
+					else
+					{
+						unit.name.clear();
+					}
+				}
+				else
+				{
+					path p(pathString);
+					optional<string>headerPathO=flagger->findHeader(p.parent_path(),unit.name,LOCAL_HEADER);
+					if(headerPathO)
+					{
+						unit.name=*headerPathO;
+					}
+					else
+					{
+						unit.name.clear();
+					}
+				}
+			}
+			erase_if(data.depend,[](const ImportUnit&unit){return unit.name.size()==0;});
 		}
 		moduleToFile.clear();
+	}
+	constexpr optional<const pair<const string,FileData>*>query(const string&p)
+		const noexcept
+	{
+		auto it=files.find(p);
+		return it==files.end()?nullopt:optional<const pair<const string,FileData>*>{&*it};
+	}
+	constexpr auto begin()const
+	{
+		return files.begin();
+	}
+	constexpr auto end()const
+	{
+		return files.end();
 	}
 };
