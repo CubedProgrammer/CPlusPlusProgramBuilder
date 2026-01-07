@@ -5,7 +5,6 @@ using std::chrono::file_clock;
 using std::filesystem::current_path,std::filesystem::file_time_type,std::filesystem::path,std::filesystem::recursive_directory_iterator;
 using namespace std;
 using namespace chrono_literals;
-constexpr string_view CBP_ALLOWED_EXTENSIONS="c++ c++m cc ccm cpp cppm cxx cxxm";
 export struct ModuleCompilation
 {
 	vector<ImportUnit>dependency;
@@ -113,7 +112,7 @@ public:
 	}
 	void add_file(path&&p,bool externalDirectory=false)
 	{
-		back.addFile(p,externalDirectory);
+		//back.addFile(p,externalDirectory);
 		ModuleConnection&connection=externalDirectory?external:internal;
 		if(!connection.files.m.contains(p))
 		{
@@ -134,7 +133,6 @@ public:
 	void add_directory(const path&p,bool externalDirectory=false)
 	{
 		using namespace string_view_literals;
-		auto permitted=ranges::to<vector<string>>(views::split(CBP_ALLOWED_EXTENSIONS," "sv));
 		set<path>directoriesToCreate;
 		if(!externalDirectory&&options.objectDirectory().size())
 		{
@@ -144,7 +142,7 @@ public:
 		for(const auto&en:recursive_directory_iterator(p))
 		{
 			path current=en.path();
-			if(current.has_extension()&&ranges::contains(permitted,current.extension().string().substr(1))&&en.is_regular_file())
+			if(current.has_extension()&&isExtensionPermitted(current))
 			{
 				add_file(path(current),externalDirectory);
 				if(!externalDirectory&&options.objectDirectory().size())
@@ -273,6 +271,11 @@ public:
 			{
 				add_directory(t,true);
 			}
+		}
+		for(const string&s:views::keys(external.primaryModuleInterfaceUnits))
+		{
+			auto v=flagger.searchForLikelyCandidates(s);
+			println("{} {}",s,views::transform(v,[](const path&m){return m.string();}));
 		}
 		if(options.isDumpDependencyGraph())
 		{

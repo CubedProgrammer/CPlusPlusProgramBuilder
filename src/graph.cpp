@@ -2,13 +2,13 @@ export module graph;
 export import flag;
 using namespace std;
 using filesystem::path;
-using views::filter;
 export struct FileData
 {
 	string module;
 	path preprocessed;
 	path object;
 	vector<ImportUnit>depend;
+	vector<char>resolved;
 	bool external;
 };
 export class ProjectGraph
@@ -40,7 +40,8 @@ public:
 				if(moduleData.name.size()||!external)
 				{
 					path object=external?path{flagger->moduleNameToFile(moduleData.name,configuration->objectDirectory())}:replaceMove(*configuration,p,path{"o"});
-					it->second={std::move(moduleData.name),std::move(*preprocessedFile),std::move(object),std::move(moduleData.imports),external};
+					size_t size=moduleData.imports.size();
+					it->second={std::move(moduleData.name),std::move(*preprocessedFile),std::move(object),std::move(moduleData.imports),vector<char>(size),external};
 				}
 			}
 			else
@@ -49,8 +50,9 @@ public:
 			}
 		}
 	}
-	void convertDependenciesToPath()
+	unordered_set<string>convertDependenciesToPath()
 	{
+		unordered_set<string>unresolved;
 		for(auto&[pathString,data]:files)
 		{
 			for(auto&unit:data.depend)
@@ -64,6 +66,7 @@ public:
 					}
 					else
 					{
+						unresolved.insert(std::move(unit.name));
 						unit.name.clear();
 					}
 				}
@@ -84,6 +87,7 @@ public:
 			erase_if(data.depend,[](const ImportUnit&unit){return unit.name.size()==0;});
 		}
 		moduleToFile.clear();
+		return unresolved;
 	}
 	constexpr optional<const pair<const string,FileData>*>query(const string&p)
 		const noexcept

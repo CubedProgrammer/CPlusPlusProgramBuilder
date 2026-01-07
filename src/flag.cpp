@@ -3,6 +3,7 @@ export import dependency;
 using namespace std;
 using namespace literals;
 using filesystem::path;
+using filesystem::recursive_directory_iterator;
 constexpr string_view source="int main(int,char**){return 0;}";
 constexpr string_view programPath="/tmp/C++ProgramBuilderBasicProgram.c++";
 constexpr string_view CBP_GCC_MODULE_FLAG="-fmodules";
@@ -15,6 +16,7 @@ constexpr string_view CBP_LANGUAGE_VERSION="-std=c++20";
 constexpr string_view CBP_STDLIB_FLAG="-stdlib=libc++";
 constexpr string_view CBP_CLANG_PRECOMPILE_FLAG="--precompile";
 constexpr string_view CBP_HEADER_LANGUAGE="c++-user-header";
+constexpr string_view CBP_ALLOWED_EXTENSIONS="c++ c++m cc ccm cpp cppm cxx cxxm";
 string clangPrebuiltModuleFlag;
 string clangModulePath;
 vector<string>clangHeaderFlagStorage;
@@ -113,11 +115,17 @@ export pair<CompilerType,vector<string>>getCompilerInformation(const BuildConfig
 	}
 	return{type,std::move(directories)};
 }
+export bool isExtensionPermitted(const path&p)
+	noexcept
+{
+	return p.extension().string().size()>1&&is_regular_file(p)&&ranges::contains(ranges::to<vector<string>>(views::split(CBP_ALLOWED_EXTENSIONS," "sv)),p.extension().string().substr(1));
+}
 export class CompilerConfigurer
 {
 	CompilerType type;
 	vector<string>includeDirectories;
 	vector<char*>compilerArguments;
+	vector<path>potentialModuleFiles;
 public:
 	CompilerConfigurer(CompilerType ct,vector<string>id)
 		noexcept
@@ -208,6 +216,34 @@ public:
 			}
 		}
 		return opath;
+	}
+	vector<path>searchForLikelyCandidates(string_view name)
+	{
+		vector<path>candidates;
+		if(potentialModuleFiles.size()==0)
+		{
+			for(const string&d:includeDirectories)
+			{
+				recursive_directory_iterator inside(d);
+				for(path en:inside)
+				{
+					if(isExtensionPermitted(en))
+					{
+						potentialModuleFiles.push_back(std::move(en));
+					}
+				}
+			}
+		}
+		for(const path&p:potentialModuleFiles)
+		{
+			string stem=p.stem().string();
+			bool maybe=stem==name;
+			if(maybe)
+			{
+				candidates.push_back(p);
+			}
+		}
+		return candidates;
 	}
 	void addArguments(const BuildConfiguration&configuration)
 	{
