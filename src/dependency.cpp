@@ -36,18 +36,23 @@ export path replaceMove(const BuildConfiguration&options,path file,const path&ex
 	}
 	return file;
 }
-export optional<path>preprocess(const BuildConfiguration&options,const path&file)
+export optional<path>preprocess(const BuildConfiguration&options,const path&file,bool isLLVM)
 {
 	optional<path>outOpt;
 	path out=replaceMove(options,file,path{"ii"});
 	string fileString=file.string();
 	string outString=out.string();
 	char preprocessOption[]="-E";
+	char llvmlib[]="-stdlib=libc++";
 	char outOption[]="-o";
 	vector<char*>preprocessCommand;
 	create_directories(out.parent_path());
-	preprocessCommand.reserve(options.compilerOptions.size()+4);
+	preprocessCommand.reserve(options.compilerOptions.size()+6+isLLVM);
 	preprocessCommand.push_back(svConstCaster(options.compiler()));
+	if(isLLVM)
+	{
+		preprocessCommand.push_back(llvmlib);
+	}
 	preprocessCommand.push_back(preprocessOption);
 	preprocessCommand.append_range(views::transform(options.compilerOptions,svConstCaster));
 	preprocessCommand.push_back(svConstCaster(fileString));

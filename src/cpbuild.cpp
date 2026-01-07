@@ -110,13 +110,14 @@ public:
 			return path{options.artifact()};
 		}
 	}
-	void add_file(path&&p,bool externalDirectory=false)
+	auto add_file(path&&p,bool externalDirectory=false)
 	{
 		//back.addFile(p,externalDirectory);
+		optional<pair<unordered_map<string,path>::iterator,unordered_map<path,ModuleCompilation>::iterator>>iterators;
 		ModuleConnection&connection=externalDirectory?external:internal;
 		if(!connection.files.m.contains(p))
 		{
-			optional<path>preprocessed=preprocess(options,p);
+			optional<path>preprocessed=preprocess(options,p,flagger.getCompilerType()==LLVM);
 			if(preprocessed)
 			{
 				path toscan=std::move(*preprocessed);
@@ -124,11 +125,13 @@ public:
 				path object=externalDirectory?path{flagger.moduleNameToFile(data.name,options.objectDirectory())}:getOutputFile(p);
 				if(!object.empty())
 				{
-					connection.primaryModuleInterfaceUnits.emplace(data.name,p);
-					connection.files.insert(std::move(p),std::move(object),std::move(toscan),std::move(data));
+					auto[it1,_]=connection.primaryModuleInterfaceUnits.emplace(data.name,p);
+					auto[it2,unused]=connection.files.insert(std::move(p),std::move(object),std::move(toscan),std::move(data));
+					iterators.emplace(it1,it2);
 				}
 			}
 		}
+		return iterators;
 	}
 	void add_directory(const path&p,bool externalDirectory=false)
 	{
@@ -267,10 +270,51 @@ public:
 				add_file(path{flagger.getSTDModulePath()},true);
 				add_file(path{flagger.getSTDCompatModulePath()},true);
 			}
-			for(path t:flagger.getIncludeDirectories())
+			unordered_set<string_view>unresolvedImports;
+			for(const auto&[filepath,mc]:internal.files.m)
+			{
+				using views::filter;
+				for(const auto&i:filter(mc.dependency,[](const ImportUnit&m){return m.type==MODULE;}))
+				{
+					auto itI=internal.primaryModuleInterfaceUnits.find(i.name);
+					auto itO=external.primaryModuleInterfaceUnits.find(i.name);
+					if(itI==internal.primaryModuleInterfaceUnits.end()&&itO==external.primaryModuleInterfaceUnits.end())
+					{
+						vector<path>potential=flagger.searchForLikelyCandidates(i.name);
+						bool found=false;
+						for(path&p:potential)
+						{
+							auto itO=add_file(std::move(p),true);
+							if(itO)
+							{
+								auto&[it1,it2]=*itO;
+								if(it2->second.name==i.name)
+								{
+									found=true;
+									break;
+								}
+								else
+								{
+									external.primaryModuleInterfaceUnits.erase(it1);
+									external.files.m.erase(it2);
+								}
+							}
+						}
+						if(!found)
+						{
+							unresolvedImports.insert(i.name);
+						}
+					}
+				}
+			}
+			for(string_view sv:unresolvedImports)
+			{
+				println("unresolved {}",sv);
+			}
+			/*for(path t:flagger.getIncludeDirectories())
 			{
 				add_directory(t,true);
-			}
+			}*/
 		}
 		for(const string&s:views::keys(external.primaryModuleInterfaceUnits))
 		{

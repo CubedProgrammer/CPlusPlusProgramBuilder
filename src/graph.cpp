@@ -29,7 +29,7 @@ public:
 		auto[it,success]=files.insert({p.string(),{}});
 		if(success)
 		{
-			optional<path>preprocessedFile=preprocess(*configuration,p);
+			optional<path>preprocessedFile=preprocess(*configuration,p,flagger->getCompilerType()==LLVM);
 			if(preprocessedFile)
 			{
 				ModuleData moduleData=parseModuleData(*configuration,*preprocessedFile);

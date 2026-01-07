@@ -145,6 +145,11 @@ public:
 	{
 		return includeDirectories;
 	}
+	span<const path>getPotentialModuleFiles()
+		const noexcept
+	{
+		return potentialModuleFiles;
+	}
 	string getEitherSTDModulePath(string name)
 		const
 	{
@@ -237,7 +242,18 @@ public:
 		for(const path&p:potentialModuleFiles)
 		{
 			string stem=p.stem().string();
+			size_t index=name.find(':');
 			bool maybe=stem==name;
+			if(index!=string::npos)
+			{
+				string_view partition=name.substr(index+1);
+				stem[index]='-';
+				maybe=maybe||partition==name||stem==name;
+				stem[index]='_';
+				maybe=maybe||stem==name;
+				stem.erase(index,1);
+				maybe=maybe||stem==name;
+			}
 			if(maybe)
 			{
 				candidates.push_back(p);
