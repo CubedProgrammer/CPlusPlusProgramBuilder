@@ -3,6 +3,7 @@ export import graph;
 export import process;
 using std::chrono::file_clock;
 using std::filesystem::current_path,std::filesystem::file_time_type,std::filesystem::path,std::filesystem::recursive_directory_iterator;
+using std::views::zip;
 using namespace std;
 using namespace chrono_literals;
 export struct ModuleCompilation
@@ -307,14 +308,20 @@ public:
 					}
 				}
 			}
+			auto filesToTry=ranges::to<vector<path>>(flagger.getPotentialModuleFiles());
 			for(string_view sv:unresolvedImports)
 			{
 				println("unresolved {}",sv);
+				auto scores=views::transform(filesToTry,[sv](const path&m){string n=m.stem().string();return similarity(sv,n);});
+				auto scoresVector=ranges::to<vector<double>>(scores);
+				ranges::sort(zip(scoresVector,filesToTry),ranges::greater());
+				for(path t:filesToTry)
+				{
+					string ts=t.stem().string();
+					println("{} {}",ts,similarity(sv,ts));
+					//add_directory(t,true);
+				}
 			}
-			/*for(path t:flagger.getIncludeDirectories())
-			{
-				add_directory(t,true);
-			}*/
 		}
 		for(const string&s:views::keys(external.primaryModuleInterfaceUnits))
 		{

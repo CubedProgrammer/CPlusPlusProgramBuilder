@@ -6,6 +6,37 @@ module;
 export module utils;
 export import std;
 using namespace std;
+size_t longestCS(string_view x,string_view y)
+{
+	using ranges::fill,views::drop;
+	if(x.size()>y.size())
+	{
+		swap(x,y);
+	}
+	vector<size_t>current(y.size());
+	vector<size_t>next(y.size());
+	size_t index=y.find(x.front());
+	if(index!=string::npos)
+	{
+		fill(drop(current,index),1);
+	}
+	for(size_t i=1;i<x.size();i++)
+	{
+		next.front()=max(current.front(),size_t(x[i]==y[0]));
+		for(size_t j=1;j<y.size();j++)
+		{
+			size_t addone=x[i]==y[j];
+			next[j]=max({current[j],next[j-1],current[j-1]+addone});
+		}
+		swap(current,next);
+	}
+	return current.back();
+}
+export double similarity(string_view x,string_view y)
+{
+	size_t l=longestCS(x,y);
+	return(double)l/max(x.size(),y.size());
+}
 export char*svConstCaster(string_view sv)
 {
 	return const_cast<char*>(sv.data());
