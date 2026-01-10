@@ -4,6 +4,7 @@ using namespace std;
 using namespace literals;
 using filesystem::path;
 using filesystem::recursive_directory_iterator;
+using views::filter;
 constexpr string_view source="int main(int,char**){return 0;}";
 constexpr string_view programPath="/tmp/C++ProgramBuilderBasicProgram.c++";
 constexpr string_view CBP_GCC_MODULE_FLAG="-fmodules";
@@ -181,7 +182,7 @@ public:
 		const
 	{
 		string file{name};
-		for(char&c:views::filter(file,bind_front(equal_to<char>(),':')))
+		for(char&c:filter(file,bind_front(equal_to<char>(),':')))
 		{
 			c='-';
 		}
@@ -243,7 +244,15 @@ public:
 		{
 			string stem=p.stem().string();
 			size_t index=name.find(':');
+			size_t dot=name.find('.');
 			bool maybe=stem==name;
+			if(dot!=string::npos)
+			{
+				path pcopy(p);
+				string full=pcopy.replace_extension().string();
+				ranges::fill(filter(full,bind_front(equal_to<char>(),'/')),'.');
+				maybe=maybe||full.ends_with(name);
+			}
 			if(index!=string::npos)
 			{
 				string_view partition=name.substr(index+1);
