@@ -313,12 +313,13 @@ public:
 			{
 				println("unresolved {}",sv);
 				auto scores=views::transform(filesToTry,[sv](const path&m){string n=m.stem().string();return similarity(sv,n);});
-				auto scoresVector=ranges::to<vector<double>>(scores);
+				auto scoresVector=ranges::to<vector<ModulePathSimilarity>>(scores);
 				ranges::sort(zip(scoresVector,filesToTry),ranges::greater());
 				for(path t:filesToTry)
 				{
 					string ts=t.stem().string();
-					println("{} {}",ts,similarity(sv,ts));
+					auto sim=similarity(sv,ts);
+					println("{} {} {}",ts,sim.lcs,sim.remaining);
 					//add_directory(t,true);
 				}
 			}

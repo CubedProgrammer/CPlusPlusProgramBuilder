@@ -6,6 +6,17 @@ module;
 export module utils;
 export import std;
 using namespace std;
+export struct ModulePathSimilarity
+{
+	size_t lcs;
+	size_t remaining;
+	constexpr bool operator==(const ModulePathSimilarity&)const noexcept=default;
+	constexpr std::strong_ordering operator<=>(const ModulePathSimilarity&other)const noexcept
+	{
+		auto first=lcs<=>other.lcs;
+		return first==0?other.remaining<=>remaining:first;
+	}
+};
 size_t longestCS(string_view x,string_view y)
 {
 	using ranges::fill,views::drop;
@@ -32,10 +43,10 @@ size_t longestCS(string_view x,string_view y)
 	}
 	return current.back();
 }
-export double similarity(string_view x,string_view y)
+export ModulePathSimilarity similarity(string_view x,string_view y)
 {
 	size_t l=longestCS(x,y);
-	return(double)l/max(x.size(),y.size());
+	return{l,max(x.size(),y.size())-l};
 }
 export char*svConstCaster(string_view sv)
 {
