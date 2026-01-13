@@ -3,7 +3,7 @@ export import graph;
 export import process;
 using std::chrono::file_clock;
 using std::filesystem::current_path,std::filesystem::file_time_type,std::filesystem::path,std::filesystem::recursive_directory_iterator;
-using std::views::zip;
+using std::views::keys,std::views::zip;
 using namespace std;
 using namespace chrono_literals;
 export struct ModuleCompilation
@@ -320,11 +320,25 @@ public:
 					string ts=t.stem().string();
 					auto sim=similarity(sv,ts);
 					println("{} {} {}",ts,sim.lcs,sim.remaining);
-					//add_directory(t,true);
+					auto iteratorsOpt=add_file(std::move(t),true);
+					if(iteratorsOpt)
+					{
+						auto[it1,it2]=*iteratorsOpt;
+						if(it1->first==sv)
+						{
+							println("found {}",t.string());
+							break;
+						}
+						else
+						{
+							external.primaryModuleInterfaceUnits.erase(it1);
+							external.files.m.erase(it2);
+						}
+					}
 				}
 			}
 		}
-		for(const string&s:views::keys(external.primaryModuleInterfaceUnits))
+		for(const string&s:keys(external.primaryModuleInterfaceUnits))
 		{
 			auto v=flagger.searchForLikelyCandidates(s);
 			println("{} {}",s,views::transform(v,[](const path&m){return m.string();}));

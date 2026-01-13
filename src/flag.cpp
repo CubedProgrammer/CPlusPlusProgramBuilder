@@ -240,29 +240,31 @@ public:
 				}
 			}
 		}
+		size_t index=name.find(':');
+		size_t dot=name.find('.');
+		vector<string>additionalChecks;
+		if(index!=string::npos)
+		{
+			additionalChecks.push_back(string{name.substr(index+1)});
+			additionalChecks.push_back(string{name});
+			additionalChecks.back()[index]='-';
+			additionalChecks.push_back(string{name});
+			additionalChecks.back()[index]='_';
+			additionalChecks.push_back(string{name});
+			additionalChecks.back().erase(index,1);
+		}
 		for(const path&p:potentialModuleFiles)
 		{
 			string stem=p.stem().string();
-			size_t index=name.find(':');
-			size_t dot=name.find('.');
 			bool maybe=stem==name;
-			if(dot!=string::npos)
+			if(!maybe&&dot!=string::npos)
 			{
 				path pcopy(p);
 				string full=pcopy.replace_extension().string();
 				ranges::fill(filter(full,bind_front(equal_to<char>(),'/')),'.');
 				maybe=maybe||full.ends_with(name);
 			}
-			if(index!=string::npos)
-			{
-				string_view partition=name.substr(index+1);
-				stem[index]='-';
-				maybe=maybe||partition==name||stem==name;
-				stem[index]='_';
-				maybe=maybe||stem==name;
-				stem.erase(index,1);
-				maybe=maybe||stem==name;
-			}
+			maybe=maybe||ranges::fold_left(views::transform(additionalChecks,bind_front(ranges::equal_to{},stem)),false,logical_or<bool>());
 			if(maybe)
 			{
 				candidates.push_back(p);
