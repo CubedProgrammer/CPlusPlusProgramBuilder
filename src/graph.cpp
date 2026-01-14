@@ -2,14 +2,19 @@ export module graph;
 export import flag;
 using namespace std;
 using filesystem::path;
-using views::filter;
+using views::zip;
 export struct FileData
 {
 	string module;
 	path preprocessed;
 	path object;
 	vector<ImportUnit>depend;
+	vector<char>absoluteResolved;
 	bool external;
+	auto dependResolved(this auto&self)
+	{
+		return zip(self.depend,self.absoluteResolved);
+	}
 };
 export struct ForwardGraphNode
 {
@@ -68,7 +73,8 @@ public:
 				if(moduleData.name.size()||!external)
 				{
 					path object=external?path{flagger->moduleNameToFile(moduleData.name,configuration->objectDirectory())}:replaceMove(*configuration,p,path{"o"});
-					it->second={std::move(moduleData.name),std::move(*preprocessedFile),std::move(object),std::move(moduleData.imports),external};
+					size_t icount=moduleData.imports.size();
+					it->second={std::move(moduleData.name),std::move(*preprocessedFile),std::move(object),std::move(moduleData.imports),vector<char>(icount),external};
 				}
 			}
 			else
@@ -81,7 +87,7 @@ public:
 	{
 		for(auto&[pathString,data]:files)
 		{
-			for(auto&unit:data.depend)
+			for(auto[unit,hasBeenResolved]:data.dependResolved())
 			{
 				if(unit.type==MODULE)
 				{
@@ -89,23 +95,17 @@ public:
 					if(it!=moduleToFile.end())
 					{
 						unit.name=it->second;
-					}
-					else
-					{
-						unit.name.clear();
+						hasBeenResolved=true;
 					}
 				}
 				else
 				{
 					path p(pathString);
-					optional<string>headerPathO=flagger->findHeader(p.parent_path(),unit.name,LOCAL_HEADER);
+					optional<string>headerPathO=flagger->findHeader(p.parent_path(),unit.name,unit.type==LOCAL_HEADER);
 					if(headerPathO)
 					{
 						unit.name=*headerPathO;
-					}
-					else
-					{
-						unit.name.clear();
+						hasBeenResolved=true;
 					}
 				}
 			}
@@ -165,14 +165,8 @@ export ForwardGraph makeForwardGraph(const ProjectGraph&pg,bool forceRecompile,b
 				external=dependData.external;
 			}
 			ForwardGraphNode node{iu.name,true,iu.type!=MODULE,external};
-			auto[itN,succN]=g.insert({std::move(node),{{},0,false}});
-			switch(iu.type)
-			{
-				case MODULE:
-					break;
-				case SYS_HEADER:
-				case LOCAL_HEADER:
-			}
+			auto[itN,_]=g.insert({std::move(node),{{},0,false}});
+			itN->second.dependent.push_back(it->first);
 		}
 	}
 	return g;
