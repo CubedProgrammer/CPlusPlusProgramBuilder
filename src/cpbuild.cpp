@@ -34,34 +34,6 @@ export struct ModuleConnection
 	FileModuleMap files;
 	unordered_map<string,path>primaryModuleInterfaceUnits;
 };
-export struct ForwardGraphNode
-{
-	string name;
-	bool notInterface;
-	bool header;
-	bool external;
-	constexpr bool operator==(const ForwardGraphNode&)const noexcept=default;
-};
-namespace std
-{
-	template<>
-	struct hash<ForwardGraphNode>
-	{
-		constexpr size_t operator()(const ForwardGraphNode&object)
-			const noexcept
-		{
-			hash<string>shasher;
-			return shasher(object.name)*size_t((int)object.header+(int)object.external+1);
-		}
-	};
-}
-struct ForwardGraphNodeData
-{
-	vector<ForwardGraphNode>dependent;
-	uint16_t remaining;
-	bool recompile;
-};
-export using ForwardGraph=unordered_map<ForwardGraphNode,ForwardGraphNodeData>;
 export class ProgramBuilder;
 extern unique_ptr<ProgramBuilder>singletonPointerProgramBuilder;
 struct ProgramBuilderConstructorTag{};
@@ -114,7 +86,7 @@ public:
 	void add_file(path&&p,bool externalDirectory=false)
 	{
 		back.addFile(p,externalDirectory);
-		ModuleConnection&connection=externalDirectory?external:internal;
+		/*ModuleConnection&connection=externalDirectory?external:internal;
 		if(!connection.files.m.contains(p))
 		{
 			optional<path>preprocessed=preprocess(options,p);
@@ -129,7 +101,7 @@ public:
 					connection.files.insert(std::move(p),std::move(object),std::move(toscan),std::move(data));
 				}
 			}
-		}
+		}*/
 	}
 	void add_directory(const path&p,bool externalDirectory=false)
 	{
@@ -412,14 +384,7 @@ public:
 				}
 			}
 		}
-		queue<ForwardGraphNode>compileQueue;
-		for(const auto&[node,edges]:graph)
-		{
-			if(edges.remaining==0)
-			{
-				compileQueue.push(node);
-			}
-		}
+		queue<ForwardGraphNode>compileQueue=buildInitialCompileQueue(graph);
 		unordered_map<unsigned,ForwardGraphNode>processToNode;
 		while(!pm.is_empty()||compileQueue.size())
 		{
