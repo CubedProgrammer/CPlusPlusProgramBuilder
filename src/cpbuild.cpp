@@ -1,5 +1,5 @@
 export module cpbuild;
-export import graph;
+export import graph.back;
 export import process;
 using std::chrono::file_clock;
 using std::filesystem::current_path,std::filesystem::file_time_type,std::filesystem::path,std::filesystem::recursive_directory_iterator;
@@ -192,6 +192,7 @@ public:
 	}
 	void cpbuild()
 	{
+		constexpr string EMPTYSTRING="";
 		span<string_view>targets=options.targets;
 		flagger.addArguments(options);
 		println("{}",targets);
@@ -263,7 +264,8 @@ public:
 		{
 			println("{} {}",p,views::transform(data.depend,&ImportUnit::name));
 		}
-		queue<path>externalImports;
+		graph=makeForwardGraph(back,options.isForceRecompile(),options.isForceRecompileEnhanced());
+		/*queue<path>externalImports;
 		unordered_set<path>externalImportVisited;
 		FileModuleMap headers;
 		auto interfaceEndIt=internal.primaryModuleInterfaceUnits.end();
@@ -383,8 +385,12 @@ public:
 					}
 				}
 			}
-		}
+		}*/
 		queue<ForwardGraphNode>compileQueue=buildInitialCompileQueue(graph);
+		for(const auto&[node,data]:graph.internal())
+		{
+			println("node {}\n{}",node.name,views::transform(data.dependent,&ForwardGraphNode::name));
+		}
 		unordered_map<unsigned,ForwardGraphNode>processToNode;
 		while(!pm.is_empty()||compileQueue.size())
 		{
@@ -393,10 +399,14 @@ public:
 				ForwardGraphNode node=std::move(compileQueue.front());
 				compileQueue.pop();
 				const ForwardGraphNodeData&data=graph.at(node);
-				const ModuleCompilation&mc=node.header?headers.m.at({node.name}):node.external?external.files.m.at(path{node.name}):internal.files.m.at(path{node.name});
+				path cmi=replaceMove(options,path{node.name},path{"pcm"});
+				auto dataPairO=back.query(node.name);
+				auto requiredTrioO=dataPairO.transform([](const pair<const string,FileData>*m){return dataToTrio(m->second);});
+				auto requiredTrio=requiredTrioO.value_or(tuple<const string&,const path&,span<const ImportUnit>>{EMPTYSTRING,cmi,span<const ImportUnit>{static_cast<const ImportUnit*>(nullptr),0}});
+				//const ModuleCompilation&mc=node.header?headers.m.at({node.name}):node.external?external.files.m.at(path{node.name}):internal.files.m.at(path{node.name});
 				if(!node.external&&!node.header)
 				{
-					linkerArguments.push_back(mc.output.string());
+					linkerArguments.push_back(get<1>(requiredTrio).string());
 				}
 				if(data.recompile)
 				{
@@ -404,16 +414,16 @@ public:
 					{
 						println("Compiling {}",node.name);
 					}
-					string outputfile=node.external&&!node.header?"/dev/null":mc.output.string();
+					string outputfile=node.external&&!node.header?"/dev/null":get<1>(requiredTrio).string();
 					path emptypath;
-					const path&pp=node.header?emptypath:(node.external?external.files:internal.files).m.at(path{node.name}).preprocessed;
+					const path&pp=node.header?emptypath:dataPairO.value()->second.preprocessed;
 					string pps=pp.string();
 					bool exchange=pps.size();
 					if(exchange)
 					{
 						swap(pps,node.name);
 					}
-					auto arguments=flagger.compileFile(node.name,outputfile,mc.name,mc.dependency,options,node.notInterface,node.header);
+					auto arguments=flagger.compileFile(node.name,outputfile,get<0>(requiredTrio),get<2>(requiredTrio),options,node.notInterface,node.header);
 					auto opid=pm.run(arguments,options.isDisplayCommand());
 					if(exchange)
 					{
