@@ -16,6 +16,27 @@ export struct FileData
 	{
 		return zip(self.depend,self.absoluteResolved);
 	}
+	void eraseDuplicateImports()
+		noexcept
+	{
+		auto it1=depend.begin();
+		auto it2=it1;
+		auto it3=absoluteResolved.begin();
+		for(;it2!=depend.end();++it2)
+		{
+			if(it1!=it2)
+			{
+				iter_swap(it1,it2);
+			}
+			if(!ranges::contains(ranges::subrange{depend.begin(),it1},*it1))
+			{
+				++it1;
+				++it3;
+			}
+		}
+		depend.erase(it1,it2);
+		absoluteResolved.erase(it3,absoluteResolved.end());
+	}
 };
 export using CompilerRequiredTrio=tuple<const string&,const path&,span<const ImportUnit>>;
 export CompilerRequiredTrio dataToTrio(const FileData&dat)

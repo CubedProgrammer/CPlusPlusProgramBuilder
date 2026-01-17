@@ -118,34 +118,51 @@ public:
 	{
 		string ln;
 		string current;
-		optional<ProjectGraph::iterator>currentFileO;
+		array<string,3>stringFields;
+		bool external=false;
+		vector<ImportUnit>imports;
+		size_t index=0;
+		bool inside=false;
 		while(getline(in,ln))
 		{
 			if(ln.size()>0)
 			{
 				if(ln.front()==OPENING)
 				{
-					path p(current);
+					imports.clear();
+					index=0;
+					inside=true;
 				}
 				else if(ln.front()==CLOSING)
 				{
-					currentFileO.reset();
+					back.addEntry(std::move(current),std::move(stringFields[0]),path{stringFields[1]},path{stringFields[2]},std::move(imports),external);
+					inside=false;
 				}
-				else if(currentFileO)
-				{}
+				else if(inside)
+				{
+					if(index<stringFields.size())
+					{
+						stringFields[index]=std::move(ln);
+					}
+					else if(index==stringFields.size())
+					{
+						external=ln!="false";
+					}
+					else
+					{
+						const size_t ind=ln.find_last_of(',');
+						ImportType type=MODULE;
+						if(ind!=string::npos)
+						{
+							type=static_cast<ImportType>(stoi(ln.substr(ind+1)));
+						}
+						imports.emplace_back(std::move(ln),type);
+					}
+					++index;
+				}
 				else
 				{
 					current=std::move(ln);
-				}
-				size_t ind=ln.find(',');
-				if(ind==string::npos)
-				{
-					current=std::move(ln);
-				}
-				else
-				{
-					string name(ln.substr(0,ind));
-					string path(ln.substr(ind+1));
 				}
 			}
 		}
@@ -170,13 +187,16 @@ public:
 		ofstream ofs(string{options.dependencyCache()});
 		for(const auto&[filepath,filedata]:back)
 		{
-			println(ofs,"{}\n{}",filepath,OPENING);
-			println(ofs,"{}\n{}",filedata.module,filedata.external);
-			for(const ImportUnit&i:filedata.depend)
+			if(filedata.module.size())
 			{
-				println(ofs,"{}",i.name);
+				println(ofs,"{}\n{}",filepath,OPENING);
+				println(ofs,"{}\n{}\n{}\n{}",filedata.module,filedata.preprocessed.string(),filedata.object.string(),filedata.external);
+				for(const ImportUnit&i:filedata.depend)
+				{
+					println(ofs,"{},{}",i.name,to_underlying(i.type));
+				}
+				print(ofs,"{}\n",CLOSING);
 			}
-			print(ofs,"{}\n",CLOSING);
 		}
 	}
 	void cpbuild()

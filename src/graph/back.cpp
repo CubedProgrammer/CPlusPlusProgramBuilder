@@ -69,7 +69,11 @@ public:
 	}
 	void addEntry(string p,string module,path object,path preprocessed,vector<ImportUnit>&&imports,bool external)
 	{
-		files[external].insert({std::move(p),{std::move(module),std::move(preprocessed),std::move(object),std::move(imports),{},external}});
+		auto[it,succ]=files[external].insert({std::move(p),{std::move(module),std::move(preprocessed),std::move(object),std::move(imports),{},external}});
+		if(succ)
+		{
+			it->second.eraseDuplicateImports();
+		}
 	}
 	void addFile(path p,bool external)
 	{
@@ -89,6 +93,7 @@ public:
 					path object=external?path{flagger->moduleNameToFile(moduleData.name,configuration->objectDirectory())}:replaceMove(*configuration,p,path{"o"});
 					size_t icount=moduleData.imports.size();
 					it->second={std::move(moduleData.name),std::move(*preprocessedFile),std::move(object),std::move(moduleData.imports),vector<char>(icount),external};
+					it->second.eraseDuplicateImports();
 				}
 			}
 			else
