@@ -123,47 +123,44 @@ public:
 		vector<ImportUnit>imports;
 		size_t index=0;
 		bool inside=false;
-		while(getline(in,ln))
+		while(!getline(in,ln).eof())
 		{
-			if(ln.size()>0)
+			if(ln.front()==OPENING)
 			{
-				if(ln.front()==OPENING)
+				imports.clear();
+				index=0;
+				inside=true;
+			}
+			else if(ln.front()==CLOSING)
+			{
+				back.addEntry(std::move(current),std::move(stringFields[0]),path{stringFields[1]},path{stringFields[2]},std::move(imports),external);
+				inside=false;
+			}
+			else if(inside)
+			{
+				if(index<stringFields.size())
 				{
-					imports.clear();
-					index=0;
-					inside=true;
+					stringFields[index]=std::move(ln);
 				}
-				else if(ln.front()==CLOSING)
+				else if(index==stringFields.size())
 				{
-					back.addEntry(std::move(current),std::move(stringFields[0]),path{stringFields[1]},path{stringFields[2]},std::move(imports),external);
-					inside=false;
-				}
-				else if(inside)
-				{
-					if(index<stringFields.size())
-					{
-						stringFields[index]=std::move(ln);
-					}
-					else if(index==stringFields.size())
-					{
-						external=ln!="false";
-					}
-					else
-					{
-						const size_t ind=ln.find_last_of(',');
-						ImportType type=MODULE;
-						if(ind!=string::npos)
-						{
-							type=static_cast<ImportType>(stoi(ln.substr(ind+1)));
-						}
-						imports.emplace_back(std::move(ln),type);
-					}
-					++index;
+					external=ln!="false";
 				}
 				else
 				{
-					current=std::move(ln);
+					const size_t ind=ln.find_last_of(',');
+					ImportType type=MODULE;
+					if(ind!=string::npos)
+					{
+						type=static_cast<ImportType>(stoi(ln.substr(ind+1)));
+					}
+					imports.emplace_back(ln.substr(0,ind),type);
 				}
+				++index;
+			}
+			else
+			{
+				current=std::move(ln);
 			}
 		}
 	}
@@ -178,6 +175,7 @@ public:
 			{
 				parseDependencies(ifs);
 			}
+			println("loaded {}",loaded);
 		}
 		return loaded;
 	}
@@ -187,7 +185,7 @@ public:
 		ofstream ofs(string{options.dependencyCache()});
 		for(const auto&[filepath,filedata]:back)
 		{
-			if(filedata.module.size())
+			if(!filedata.external||filedata.module.size())
 			{
 				println(ofs,"{}\n{}",filepath,OPENING);
 				println(ofs,"{}\n{}\n{}\n{}",filedata.module,filedata.preprocessed.string(),filedata.object.string(),filedata.external);
@@ -205,51 +203,60 @@ public:
 		span<string_view>targets=options.targets;
 		flagger.addArguments(options);
 		println("{}",targets);
-		for(path t:targets)
+		bool dependencyHasBeenLoaded=loadedDependencies();
+		if(!dependencyHasBeenLoaded)
 		{
-			if(is_directory(t))
+			for(path t:targets)
 			{
-				add_directory(t);
+				if(is_directory(t))
+				{
+					add_directory(t);
+				}
+				else
+				{
+					add_file(std::move(t));
+				}
+			}
+			if(options.moduleMapCache().size())
+			{
+				ifstream fin(string{options.moduleMapCache()});
+				string line;
+				while(getline(fin,line))
+				{
+					if(line.size())
+					{
+						add_file(path{line},true);
+					}
+				}
+				unsigned stdModules=back.checkForStandardModules();
+				bool needStd=!(stdModules&1);
+				bool needStdCompat=!(stdModules>>1&1);
+				if(needStd)
+				{
+					add_file(flagger.getSTDModulePath(),true);
+				}
+				if(needStdCompat)
+				{
+					add_file(flagger.getSTDCompatModulePath(),true);
+				}
 			}
 			else
 			{
-				add_file(std::move(t));
-			}
-		}
-		if(options.moduleMapCache().size())
-		{
-			ifstream fin(string{options.moduleMapCache()});
-			string line;
-			while(getline(fin,line))
-			{
-				if(line.size())
+				if(flagger.getCompilerType()==LLVM)
 				{
-					add_file(path{line},true);
+					add_file(path{flagger.getSTDModulePath()},true);
+					add_file(path{flagger.getSTDCompatModulePath()},true);
+				}
+				for(path t:flagger.getIncludeDirectories())
+				{
+					add_directory(t,true);
 				}
 			}
-			unsigned stdModules=back.checkForStandardModules();
-			bool needStd=!(stdModules&1);
-			bool needStdCompat=!(stdModules>>1&1);
-			if(needStd)
-			{
-				add_file(flagger.getSTDModulePath(),true);
-			}
-			if(needStdCompat)
-			{
-				add_file(flagger.getSTDCompatModulePath(),true);
-			}
+			back.convertDependenciesToPath();
 		}
-		else
+		if(options.dependencyCache().size())
 		{
-			if(flagger.getCompilerType()==LLVM)
-			{
-				add_file(path{flagger.getSTDModulePath()},true);
-				add_file(path{flagger.getSTDCompatModulePath()},true);
-			}
-			for(path t:flagger.getIncludeDirectories())
-			{
-				add_directory(t,true);
-			}
+			cacheDependencies();
 		}
 		if(options.isDumpDependencyGraph())
 		{
@@ -258,11 +265,6 @@ public:
 				auto importstr=views::join(views::transform(data.depend,[](const ImportUnit&unit){return unit.name+'\n';}));
 				println("{}\n{}",p,ranges::to<string>(importstr));
 			}
-		}
-		back.convertDependenciesToPath();
-		if(options.dependencyCache().size())
-		{
-			cacheDependencies();
 		}
 		for(const auto&[p,data]:back)
 		{

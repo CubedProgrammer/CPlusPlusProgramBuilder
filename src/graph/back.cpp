@@ -67,9 +67,10 @@ public:
 	{
 		return{&files,files[1].end(),true};
 	}
-	void addEntry(string p,string module,path object,path preprocessed,vector<ImportUnit>&&imports,bool external)
+	void addEntry(string p,string module,path preprocessed,path object,vector<ImportUnit>&&imports,bool external)
 	{
-		auto[it,succ]=files[external].insert({std::move(p),{std::move(module),std::move(preprocessed),std::move(object),std::move(imports),{},external}});
+		size_t icount=imports.size();
+		auto[it,succ]=files[external].insert({std::move(p),{std::move(module),std::move(preprocessed),std::move(object),std::move(imports),vector<char>(icount),external}});
 		if(succ)
 		{
 			it->second.eraseDuplicateImports();
@@ -95,6 +96,14 @@ public:
 					it->second={std::move(moduleData.name),std::move(*preprocessedFile),std::move(object),std::move(moduleData.imports),vector<char>(icount),external};
 					it->second.eraseDuplicateImports();
 				}
+				else
+				{
+					files[external].erase(it);
+				}
+				/*if(p.string().starts_with("/usr/include/octave-10.3.0/octave/"))
+				{
+					println("external {} {} {}",moduleData.name,it->second.external,p.string());
+				}*/
 			}
 			else
 			{
