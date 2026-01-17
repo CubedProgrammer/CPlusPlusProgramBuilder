@@ -1,11 +1,14 @@
 export module cpbuild;
-export import graph;
+export import graph.back;
 export import process;
 using std::chrono::file_clock;
 using std::filesystem::current_path,std::filesystem::file_time_type,std::filesystem::path,std::filesystem::recursive_directory_iterator;
 using std::views::keys,std::views::zip;
 using namespace std;
 using namespace chrono_literals;
+constexpr string_view CBP_ALLOWED_EXTENSIONS="c++ c++m cc ccm cpp cppm cxx cxxm";
+constexpr char OPENING='[';
+constexpr char CLOSING=']';
 export struct ModuleCompilation
 {
 	vector<ImportUnit>dependency;
@@ -34,34 +37,6 @@ export struct ModuleConnection
 	FileModuleMap files;
 	unordered_map<string,path>primaryModuleInterfaceUnits;
 };
-export struct ForwardGraphNode
-{
-	string name;
-	bool notInterface;
-	bool header;
-	bool external;
-	constexpr bool operator==(const ForwardGraphNode&)const noexcept=default;
-};
-namespace std
-{
-	template<>
-	struct hash<ForwardGraphNode>
-	{
-		constexpr size_t operator()(const ForwardGraphNode&object)
-			const noexcept
-		{
-			hash<string>shasher;
-			return shasher(object.name)*size_t((int)object.header+(int)object.external+1);
-		}
-	};
-}
-struct ForwardGraphNodeData
-{
-	vector<ForwardGraphNode>dependent;
-	uint16_t remaining;
-	bool recompile;
-};
-export using ForwardGraph=unordered_map<ForwardGraphNode,ForwardGraphNodeData>;
 export class ProgramBuilder;
 extern unique_ptr<ProgramBuilder>singletonPointerProgramBuilder;
 struct ProgramBuilderConstructorTag{};
@@ -69,8 +44,6 @@ class ProgramBuilder
 {
 	BuildConfiguration options;
 	vector<string>linkerArguments;
-	ModuleConnection internal;
-	ModuleConnection external;
 	ForwardGraph graph;
 	CompilerConfigurer flagger;
 	ProjectGraph back;
@@ -78,7 +51,7 @@ class ProgramBuilder
 public:
 	ProgramBuilder(ProgramBuilderConstructorTag,pair<CompilerType,vector<string>>tai,BuildConfiguration op)
 		noexcept
-		:options(std::move(op)),linkerArguments(),internal(),graph(),flagger(tai.first,std::move(tai.second)),back(options,flagger),pm(op.threadCount)
+		:options(std::move(op)),linkerArguments(),graph(),flagger(tai.first,std::move(tai.second)),back(options,flagger),pm(op.threadCount)
 	{}
 	ProgramBuilder()=delete;
 	ProgramBuilder(const ProgramBuilder&)=delete;
@@ -113,7 +86,7 @@ public:
 	}
 	auto add_file(path&&p,bool externalDirectory=false)
 	{
-		//back.addFile(p,externalDirectory);
+		back.addFile(p,externalDirectory);
 		optional<pair<unordered_map<string,path>::iterator,unordered_map<path,ModuleCompilation>::iterator>>iterators;
 		ModuleConnection&connection=externalDirectory?external:internal;
 		if(!connection.files.m.contains(p))
@@ -164,20 +137,49 @@ public:
 	{
 		string ln;
 		string current;
-		while(getline(in,ln))
+		array<string,3>stringFields;
+		bool external=false;
+		vector<ImportUnit>imports;
+		size_t index=0;
+		bool inside=false;
+		while(!getline(in,ln).eof())
 		{
-			if(ln.size()>0)
+			if(ln.front()==OPENING)
 			{
-				size_t ind=ln.find(',');
-				if(ind==string::npos)
+				imports.clear();
+				index=0;
+				inside=true;
+			}
+			else if(ln.front()==CLOSING)
+			{
+				back.addEntry(std::move(current),std::move(stringFields[0]),path{stringFields[1]},path{stringFields[2]},std::move(imports),external);
+				inside=false;
+			}
+			else if(inside)
+			{
+				if(index<stringFields.size())
 				{
-					current=std::move(ln);
+					stringFields[index]=std::move(ln);
+				}
+				else if(index==stringFields.size())
+				{
+					external=ln!="false";
 				}
 				else
 				{
-					string name(ln.substr(0,ind));
-					string path(ln.substr(ind+1));
+					const size_t ind=ln.find_last_of(',');
+					ImportType type=MODULE;
+					if(ind!=string::npos)
+					{
+						type=static_cast<ImportType>(stoi(ln.substr(ind+1)));
+					}
+					imports.emplace_back(ln.substr(0,ind),type);
 				}
+				++index;
+			}
+			else
+			{
+				current=std::move(ln);
 			}
 		}
 	}
@@ -192,302 +194,106 @@ public:
 			{
 				parseDependencies(ifs);
 			}
+			println("loaded {}",loaded);
 		}
 		return loaded;
 	}
 	void cacheDependencies()
 		const
 	{
-		constexpr char OPENING='[';
-		constexpr char CLOSING=']';
 		ofstream ofs(string{options.dependencyCache()});
-		for(const auto&[filepath,mc]:internal.files.m)
+		for(const auto&[filepath,filedata]:back)
 		{
-			println(ofs,"{}\n{}",mc.name,OPENING);
-			println(ofs,"{}\nfalse",filepath.string());
-			for(const auto&i:mc.dependency)
+			if(!filedata.external||filedata.module.size())
 			{
-				auto it = internal.primaryModuleInterfaceUnits.find(i.name);
-				if(it!=internal.primaryModuleInterfaceUnits.end())
+				println(ofs,"{}\n{}",filepath,OPENING);
+				println(ofs,"{}\n{}\n{}\n{}",filedata.module,filedata.preprocessed.string(),filedata.object.string(),filedata.external);
+				for(const ImportUnit&i:filedata.depend)
 				{
-					println(ofs,"{},{}",i.name,it->second.string());
+					println(ofs,"{},{}",i.name,to_underlying(i.type));
 				}
-				else
-				{
-					println(ofs,"{},{}",i.name,external.primaryModuleInterfaceUnits.at(i.name).string());
-				}
+				print(ofs,"{}\n",CLOSING);
 			}
-			print(ofs,"{}\n",CLOSING);
 		}
 	}
 	void cpbuild()
 	{
+		constexpr string EMPTYSTRING="";
 		span<string_view>targets=options.targets;
 		flagger.addArguments(options);
 		println("{}",targets);
-		for(path t:targets)
+		bool dependencyHasBeenLoaded=loadedDependencies();
+		if(!dependencyHasBeenLoaded)
 		{
-			if(is_directory(t))
+			for(path t:targets)
 			{
-				add_directory(t);
+				if(is_directory(t))
+				{
+					add_directory(t);
+				}
+				else
+				{
+					add_file(std::move(t));
+				}
+			}
+			if(options.moduleMapCache().size())
+			{
+				ifstream fin(string{options.moduleMapCache()});
+				string line;
+				while(getline(fin,line))
+				{
+					if(line.size())
+					{
+						add_file(path{line},true);
+					}
+				}
+				unsigned stdModules=back.checkForStandardModules();
+				bool needStd=!(stdModules&1);
+				bool needStdCompat=!(stdModules>>1&1);
+				if(needStd)
+				{
+					add_file(flagger.getSTDModulePath(),true);
+				}
+				if(needStdCompat)
+				{
+					add_file(flagger.getSTDCompatModulePath(),true);
+				}
 			}
 			else
 			{
-				add_file(std::move(t));
-			}
-		}
-		if(options.moduleMapCache().size())
-		{
-			ifstream fin(string{options.moduleMapCache()});
-			string line;
-			while(getline(fin,line))
-			{
-				if(line.size())
+				if(flagger.getCompilerType()==LLVM)
 				{
-					add_file(path{line},true);
+					add_file(path{flagger.getSTDModulePath()},true);
+					add_file(path{flagger.getSTDCompatModulePath()},true);
+				}
+				for(path t:flagger.getIncludeDirectories())
+				{
+					add_directory(t,true);
 				}
 			}
-			path stdPath(flagger.getSTDModulePath());
-			path stdCompatPath(flagger.getSTDCompatModulePath());
-			auto[stdIt,stdInserted]=external.primaryModuleInterfaceUnits.insert({"std",stdPath});
-			auto[stdCompatIt,stdCompatInserted]=external.primaryModuleInterfaceUnits.insert({"std.compat",stdPath});
-			if(stdInserted)
-			{
-				ModuleData data=parseModuleData(options,stdPath);
-				path pp=replaceMove(options,stdPath,path{"ii"});
-				external.files.insert(std::move(stdPath),path{flagger.moduleNameToFile("std",options.objectDirectory())},pp,std::move(data));
-			}
-			if(stdCompatInserted)
-			{
-				ModuleData data=parseModuleData(options,stdCompatPath);
-				path pp=replaceMove(options,stdCompatPath,path{"ii"});
-				external.files.insert(std::move(stdCompatPath),path{flagger.moduleNameToFile("std.compat",options.objectDirectory())},pp,std::move(data));
-			}
-		}
-		else
-		{
-			if(flagger.getCompilerType()==LLVM)
-			{
-				add_file(path{flagger.getSTDModulePath()},true);
-				add_file(path{flagger.getSTDCompatModulePath()},true);
-			}
-			unordered_set<string_view>unresolvedImports;
-			for(const auto&[filepath,mc]:internal.files.m)
-			{
-				using views::filter;
-				for(const auto&i:filter(mc.dependency,[](const ImportUnit&m){return m.type==MODULE;}))
-				{
-					auto itI=internal.primaryModuleInterfaceUnits.find(i.name);
-					auto itO=external.primaryModuleInterfaceUnits.find(i.name);
-					if(itI==internal.primaryModuleInterfaceUnits.end()&&itO==external.primaryModuleInterfaceUnits.end())
-					{
-						vector<path>potential=flagger.searchForLikelyCandidates(i.name);
-						bool found=false;
-						for(path&p:potential)
-						{
-							auto itO=add_file(std::move(p),true);
-							if(itO)
-							{
-								auto&[it1,it2]=*itO;
-								if(it2->second.name==i.name)
-								{
-									found=true;
-									break;
-								}
-								else
-								{
-									external.primaryModuleInterfaceUnits.erase(it1);
-									external.files.m.erase(it2);
-								}
-							}
-						}
-						if(!found)
-						{
-							unresolvedImports.insert(i.name);
-						}
-					}
-				}
-			}
-			auto filesToTry=ranges::to<vector<path>>(flagger.getPotentialModuleFiles());
-			for(string_view sv:unresolvedImports)
-			{
-				println("unresolved {}",sv);
-				auto scores=views::transform(filesToTry,[sv](const path&m){string n=m.stem().string();return similarity(sv,n);});
-				auto scoresVector=ranges::to<vector<ModulePathSimilarity>>(scores);
-				ranges::sort(zip(scoresVector,filesToTry),ranges::greater());
-				for(path t:filesToTry)
-				{
-					string ts=t.stem().string();
-					auto sim=similarity(sv,ts);
-					println("{} {} {}",ts,sim.lcs,sim.remaining);
-					auto iteratorsOpt=add_file(std::move(t),true);
-					if(iteratorsOpt)
-					{
-						auto[it1,it2]=*iteratorsOpt;
-						if(it1->first==sv)
-						{
-							println("found {}",t.string());
-							break;
-						}
-						else
-						{
-							external.primaryModuleInterfaceUnits.erase(it1);
-							external.files.m.erase(it2);
-						}
-					}
-				}
-			}
-		}
-		for(const string&s:keys(external.primaryModuleInterfaceUnits))
-		{
-			auto v=flagger.searchForLikelyCandidates(s);
-			println("{} {}",s,views::transform(v,[](const path&m){return m.string();}));
-		}
-		if(options.isDumpDependencyGraph())
-		{
-			for(const auto&[p,mc]:internal.files.m)
-			{
-				auto importstr=views::join(views::transform(mc.dependency,[](const ImportUnit&unit){return unit.name+'\n';}));
-				println("{}\n{}",p.string(),ranges::to<string>(importstr));
-			}
+			back.convertDependenciesToPath();
 		}
 		if(options.dependencyCache().size())
 		{
 			cacheDependencies();
 		}
-		back.convertDependenciesToPath();
+		if(options.isDumpDependencyGraph())
+		{
+			for(const auto&[p,data]:back)
+			{
+				auto importstr=views::join(views::transform(data.depend,[](const ImportUnit&unit){return unit.name+'\n';}));
+				println("{}\n{}",p,ranges::to<string>(importstr));
+			}
+		}
 		for(const auto&[p,data]:back)
 		{
 			println("{} {}",p,views::transform(data.depend,&ImportUnit::name));
 		}
-		queue<path>externalImports;
-		unordered_set<path>externalImportVisited;
-		FileModuleMap headers;
-		auto interfaceEndIt=internal.primaryModuleInterfaceUnits.end();
-		for(const auto&[filepath,mc]:internal.files.m)
+		graph=makeForwardGraph(back,options.isForceRecompile(),options.isForceRecompileEnhanced());
+		queue<ForwardGraphNode>compileQueue=buildInitialCompileQueue(graph);
+		for(const auto&[node,data]:graph.internal())
 		{
-			ForwardGraphNode current{filepath.string(),mc.name.size()==0,false,false};
-			bool toCompile=options.isForceRecompile()||mc.source>mc.object;
-			auto[itToCurrent,succ]=graph.insert({current,{{},static_cast<uint16_t>(mc.dependency.size()),toCompile}});
-			if(!succ)
-			{
-				itToCurrent->second.remaining=mc.dependency.size();
-				itToCurrent->second.recompile=toCompile;
-			}
-			for(const auto&i:mc.dependency)
-			{
-				optional<string>name;
-				bool isExternal=false;
-				//println("{} imports {}",filepath.string(),i.name);
-				if(i.type==MODULE)
-				{
-					auto interfaceIt=internal.primaryModuleInterfaceUnits.find(i.name);
-					isExternal=interfaceIt==interfaceEndIt;
-					if(isExternal)
-					{
-						auto externalIt=external.primaryModuleInterfaceUnits.find(i.name);
-						if(externalIt!=external.primaryModuleInterfaceUnits.end())
-						{
-							path namepath(externalIt->second);
-							name=namepath.string();
-							if(externalImportVisited.insert(namepath).second)
-							{
-								externalImports.push(std::move(namepath));
-							}
-						}
-					}
-					else
-					{
-						name=interfaceIt->second.string();
-					}
-				}
-				else
-				{
-					name=flagger.findHeader(filepath,i.name,i.type==LOCAL_HEADER);
-					println("{} is {}",i.name,name.value());
-				}
-				if(name)
-				{
-					auto it=graph.insert({{*name,false,i.type!=MODULE,isExternal},{}}).first;
-					it->second.dependent.push_back(current);
-					if(i.type!=MODULE)
-					{
-						path headerPath(*name);
-						path modulePath(flagger.headerNameToOutput(i.name,options.objectDirectory()));
-						auto headerIt=headers.m.find(headerPath);
-						if(headerIt==headers.m.end())
-						{
-							headerIt=headers.insert(std::move(headerPath),std::move(modulePath),path{},parseModuleData(options,*name)).first;
-						}
-						it->second.recompile=headerIt->second.source>headerIt->second.object||options.isForceRecompile();
-						it->second.remaining=headerIt->second.dependency.size();
-					}
-				}
-			}
-		}
-		while(externalImports.size())
-		{
-			path importPath=std::move(externalImports.front());
-			externalImports.pop();
-			ForwardGraphNode current{importPath.string(),false,false,true};
-			const ModuleCompilation&mc=external.files.m.at(importPath);
-			bool toCompile=options.isForceRecompileEnhanced()||mc.source>mc.object;
-			auto[itToCurrent,succ]=graph.insert({current,{{},static_cast<uint16_t>(mc.dependency.size()),toCompile}});
-			if(!succ)
-			{
-				itToCurrent->second.remaining=mc.dependency.size();
-				itToCurrent->second.recompile=toCompile;
-			}
-			if(options.isDumpModuleMap())
-			{
-				println("{}",importPath.string());
-			}
-			for(const auto&i:mc.dependency)
-			{
-				optional<string>oname;
-				if(i.type==MODULE)
-				{
-					auto externalIt=external.primaryModuleInterfaceUnits.find(i.name);
-					if(externalIt!=external.primaryModuleInterfaceUnits.end())
-					{
-						const path&name=externalIt->second;
-						if(externalImportVisited.insert(name).second)
-						{
-							externalImports.push(name);
-						}
-						oname=name.string();
-					}
-				}
-				else
-				{
-					oname=flagger.findHeader(importPath,i.name,i.type==LOCAL_HEADER);
-				}
-				if(oname)
-				{
-					auto it=graph.insert({{*oname,false,i.type!=MODULE,true},{}}).first;
-					it->second.dependent.push_back(current);
-					if(i.type!=MODULE)
-					{
-						path headerPath(*oname);
-						path modulePath(flagger.headerNameToOutput(i.name,options.objectDirectory()));
-						auto headerIt=headers.m.find(headerPath);
-						if(headerIt==headers.m.end())
-						{
-							headerIt=headers.insert(std::move(headerPath),std::move(modulePath),path{},parseModuleData(options,*oname)).first;
-						}
-						it->second.recompile=headerIt->second.source>headerIt->second.object||options.isForceRecompile();
-						it->second.remaining=headerIt->second.dependency.size();
-					}
-				}
-			}
-		}
-		queue<ForwardGraphNode>compileQueue;
-		for(const auto&[node,edges]:graph)
-		{
-			if(edges.remaining==0)
-			{
-				compileQueue.push(node);
-			}
+			println("node {}\n{}",node.name,views::transform(data.dependent,&ForwardGraphNode::name));
 		}
 		unordered_map<unsigned,ForwardGraphNode>processToNode;
 		while(!pm.is_empty()||compileQueue.size())
@@ -497,10 +303,14 @@ public:
 				ForwardGraphNode node=std::move(compileQueue.front());
 				compileQueue.pop();
 				const ForwardGraphNodeData&data=graph.at(node);
-				const ModuleCompilation&mc=node.header?headers.m.at({node.name}):node.external?external.files.m.at(path{node.name}):internal.files.m.at(path{node.name});
+				path cmi=replaceMove(options,path{node.name},path{"pcm"});
+				auto dataPairO=back.query(node.name);
+				auto requiredTrioO=dataPairO.transform([](const pair<const string,FileData>*m){return dataToTrio(m->second);});
+				auto requiredTrio=requiredTrioO.value_or(tuple<const string&,const path&,span<const ImportUnit>>{EMPTYSTRING,cmi,span<const ImportUnit>{static_cast<const ImportUnit*>(nullptr),0}});
+				//const ModuleCompilation&mc=node.header?headers.m.at({node.name}):node.external?external.files.m.at(path{node.name}):internal.files.m.at(path{node.name});
 				if(!node.external&&!node.header)
 				{
-					linkerArguments.push_back(mc.output.string());
+					linkerArguments.push_back(get<1>(requiredTrio).string());
 				}
 				if(data.recompile)
 				{
@@ -508,16 +318,16 @@ public:
 					{
 						println("Compiling {}",node.name);
 					}
-					string outputfile=node.external&&!node.header?"/dev/null":mc.output.string();
+					string outputfile=node.external&&!node.header?"/dev/null":get<1>(requiredTrio).string();
 					path emptypath;
-					const path&pp=node.header?emptypath:(node.external?external.files:internal.files).m.at(path{node.name}).preprocessed;
+					const path&pp=node.header?emptypath:dataPairO.value()->second.preprocessed;
 					string pps=pp.string();
 					bool exchange=pps.size();
 					if(exchange)
 					{
 						swap(pps,node.name);
 					}
-					auto arguments=flagger.compileFile(node.name,outputfile,mc.name,mc.dependency,options,node.notInterface,node.header);
+					auto arguments=flagger.compileFile(node.name,outputfile,get<0>(requiredTrio),get<2>(requiredTrio),options,node.notInterface,node.header);
 					auto opid=pm.run(arguments,options.isDisplayCommand());
 					if(exchange)
 					{

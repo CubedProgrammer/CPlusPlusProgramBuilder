@@ -11,6 +11,7 @@ export struct ImportUnit
 {
 	string name;
 	ImportType type;
+	constexpr bool operator==(const ImportUnit&)const noexcept=default;
 };
 export struct ModuleData
 {
