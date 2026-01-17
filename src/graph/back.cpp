@@ -67,6 +67,10 @@ public:
 	{
 		return{&files,files[1].end(),true};
 	}
+	void addEntry(string p,string module,path object,path preprocessed,vector<ImportUnit>&&imports,bool external)
+	{
+		files[external].insert({std::move(p),{std::move(module),std::move(preprocessed),std::move(object),std::move(imports),{},external}});
+	}
 	void addFile(path p,bool external)
 	{
 		auto[it,success]=files[external].insert({p.string(),{}});
@@ -128,6 +132,13 @@ public:
 			erase_if(data.depend,[](const ImportUnit&unit){return unit.name.size()==0;});
 		}
 		moduleToFile.clear();
+	}
+	unsigned checkForStandardModules()
+		const noexcept
+	{
+		bool std=moduleToFile.find("std")!=moduleToFile.end();
+		bool stdCompat=moduleToFile.find("std.compat")!=moduleToFile.end();
+		return((unsigned)stdCompat<<1)|std;
 	}
 	constexpr optional<const pair<const string,FileData>*>query(string_view p)
 		const noexcept
