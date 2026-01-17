@@ -86,26 +86,7 @@ public:
 	}
 	auto add_file(path&&p,bool externalDirectory=false)
 	{
-		back.addFile(p,externalDirectory);
-		optional<pair<unordered_map<string,path>::iterator,unordered_map<path,ModuleCompilation>::iterator>>iterators;
-		ModuleConnection&connection=externalDirectory?external:internal;
-		if(!connection.files.m.contains(p))
-		{
-			optional<path>preprocessed=preprocess(options,p,flagger.getCompilerType()==LLVM);
-			if(preprocessed)
-			{
-				path toscan=std::move(*preprocessed);
-				ModuleData data=parseModuleData(options,toscan);
-				path object=externalDirectory?path{flagger.moduleNameToFile(data.name,options.objectDirectory())}:getOutputFile(p);
-				if(!object.empty())
-				{
-					auto[it1,_]=connection.primaryModuleInterfaceUnits.emplace(data.name,p);
-					auto[it2,unused]=connection.files.insert(std::move(p),std::move(object),std::move(toscan),std::move(data));
-					iterators.emplace(it1,it2);
-				}
-			}
-		}
-		return iterators;
+		return back.addFile(p,externalDirectory);
 	}
 	void add_directory(const path&p,bool externalDirectory=false)
 	{

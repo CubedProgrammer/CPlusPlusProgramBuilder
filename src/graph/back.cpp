@@ -76,12 +76,13 @@ public:
 			it->second.eraseDuplicateImports();
 		}
 	}
-	void addFile(path p,bool external)
+	optional<iterator>addFile(path p,bool external)
 	{
 		auto[it,success]=files[external].insert({p.string(),{}});
+		optional<iterator>io(iterator{&files,it,external});
 		if(success)
 		{
-			optional<path>preprocessedFile=preprocess(*configuration,p);
+			optional<path>preprocessedFile=preprocess(*configuration,p,flagger->getCompilerType()==LLVM);
 			if(preprocessedFile)
 			{
 				ModuleData moduleData=parseModuleData(*configuration,*preprocessedFile);
@@ -99,6 +100,7 @@ public:
 				else
 				{
 					files[external].erase(it);
+					io.reset();
 				}
 				/*if(p.string().starts_with("/usr/include/octave-10.3.0/octave/"))
 				{
@@ -108,8 +110,10 @@ public:
 			else
 			{
 				files[external].erase(it);
+				io.reset();
 			}
 		}
+		return io;
 	}
 	void convertDependenciesToPath()
 	{
