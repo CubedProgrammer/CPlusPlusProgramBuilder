@@ -86,6 +86,7 @@ public:
 			if(preprocessedFile)
 			{
 				ModuleData moduleData=parseModuleData(*configuration,*preprocessedFile);
+				println("module {} {}",p.string(),moduleData.name);
 				if(moduleData.name.size())
 				{
 					moduleToFile.insert({moduleData.name,p.string()});
@@ -118,11 +119,13 @@ public:
 	void convertDependenciesToPath()
 	{
 		auto it=files[0].begin();
-		for(;it!=files[1].end();++it)
+		bool second=false;
+		for(;!second||it!=files[1].end();++it)
 		{
 			if(it==files[0].end())
 			{
 				it=files[1].begin();
+				second=true;
 			}
 			auto&[pathString,data]=*it;
 			for(auto[unit,hasBeenResolved]:data.dependResolved())
@@ -150,6 +153,11 @@ public:
 			erase_if(data.depend,[](const ImportUnit&unit){return unit.name.size()==0;});
 		}
 		moduleToFile.clear();
+	}
+	void erase(iterator it)
+	{
+		moduleToFile.erase(it->second.module);
+		files[it.second].erase(it.base);
 	}
 	unsigned checkForStandardModules()
 		const noexcept

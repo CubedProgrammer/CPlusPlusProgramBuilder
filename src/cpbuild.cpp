@@ -247,12 +247,75 @@ public:
 					add_file(path{flagger.getSTDModulePath()},true);
 					add_file(path{flagger.getSTDCompatModulePath()},true);
 				}
-				for(path t:flagger.getIncludeDirectories())
+				/*for(path t:flagger.getIncludeDirectories())
 				{
 					add_directory(t,true);
-				}
+				}*/
 			}
 			back.convertDependenciesToPath();
+		}
+		unordered_set<string_view>unresolvedImports;
+		for(const auto&[filepath,filedata]:back)
+		{
+			println("module and path {} {}",filepath,filedata.module);
+			for(const auto&[i,resolved]:filedata.dependResolved())
+			{
+				println("zipped {} {}",i.name,(int)resolved);
+				if(!resolved)
+				{
+					vector<path>potential=flagger.searchForLikelyCandidates(i.name);
+					bool found=false;
+					for(path&p:potential)
+					{
+						auto itO=add_file(std::move(p),true);
+						if(itO)
+						{
+							auto&it1=*itO;
+							if(it1->second.module==i.name)
+							{
+								found=true;
+								break;
+							}
+							else
+							{
+								back.erase(it1);
+							}
+						}
+					}
+					if(!found)
+					{
+						unresolvedImports.insert(i.name);
+					}
+				}
+			}
+		}
+		auto filesToTry=ranges::to<vector<path>>(flagger.getPotentialModuleFiles());
+		for(string_view sv:unresolvedImports)
+		{
+			println("unresolved {}",sv);
+			auto scores=views::transform(filesToTry,[sv](const path&m){string n=m.stem().string();return similarity(sv,n);});
+			auto scoresVector=ranges::to<vector<ModulePathSimilarity>>(scores);
+			ranges::sort(zip(scoresVector,filesToTry),ranges::greater());
+			for(path t:filesToTry)
+			{
+				string ts=t.stem().string();
+				auto sim=similarity(sv,ts);
+				println("{} {} {}",ts,sim.lcs,sim.remaining);
+				auto iteratorOpt=add_file(std::move(t),true);
+				if(iteratorOpt)
+				{
+					auto&it1=*iteratorOpt;
+					if(it1->second.module==sv)
+					{
+						println("found {}",t.string());
+						break;
+					}
+					else
+					{
+						back.erase(it1);
+					}
+				}
+			}
 		}
 		if(options.dependencyCache().size())
 		{
