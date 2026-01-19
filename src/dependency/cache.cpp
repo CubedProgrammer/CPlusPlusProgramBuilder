@@ -1,0 +1,72 @@
+export module dependency.cache;
+export import graph.back;
+using namespace std;
+using filesystem::path;
+constexpr char OPENING='[';
+constexpr char CLOSING=']';
+export void parseDependencies(ProjectGraph&g,istream&in)
+{
+	string ln;
+	string current;
+	array<string,3>stringFields;
+	bool external=false;
+	vector<ImportUnit>imports;
+	size_t index=0;
+	bool inside=false;
+	while(!getline(in,ln).eof())
+	{
+		if(ln.front()==OPENING)
+		{
+			imports.clear();
+			index=0;
+			inside=true;
+		}
+		else if(ln.front()==CLOSING)
+		{
+			g.addEntry(std::move(current),std::move(stringFields[0]),path{stringFields[1]},path{stringFields[2]},std::move(imports),external);
+			inside=false;
+		}
+		else if(inside)
+		{
+			if(index<stringFields.size())
+			{
+				stringFields[index]=std::move(ln);
+			}
+			else if(index==stringFields.size())
+			{
+				external=ln!="false";
+			}
+			else
+			{
+				const size_t ind=ln.find_last_of(',');
+				ImportType type=MODULE;
+				if(ind!=string::npos)
+				{
+					type=static_cast<ImportType>(stoi(ln.substr(ind+1)));
+				}
+				imports.emplace_back(ln.substr(0,ind),type);
+			}
+			++index;
+		}
+		else
+		{
+			current=std::move(ln);
+		}
+	}
+}
+export void dumpDependencies(const ProjectGraph&g,ostream&out)
+{
+	for(const auto&[filepath,filedata]:g)
+	{
+		if(!filedata.external||filedata.module.size())
+		{
+			println(out,"{}\n{}",filepath,OPENING);
+			println(out,"{}\n{}\n{}\n{}",filedata.module,filedata.preprocessed.string(),filedata.object.string(),filedata.external);
+			for(const ImportUnit&i:filedata.depend)
+			{
+				println(out,"{},{}",i.name,to_underlying(i.type));
+			}
+			print(out,"{}\n",CLOSING);
+		}
+	}
+}

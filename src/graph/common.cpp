@@ -1,5 +1,5 @@
 export module graph.common;
-export import dependency;
+export import dependency.scanner;
 using namespace std;
 using filesystem::path;
 using views::zip;

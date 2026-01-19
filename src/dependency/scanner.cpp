@@ -1,6 +1,6 @@
-export module dependency;
+export module dependency.scanner;
 export import configuration;
-export import utils;
+export import utility.system;
 using namespace std;
 using std::filesystem::path;
 export enum ImportType

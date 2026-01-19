@@ -1,14 +1,12 @@
 export module cpbuild;
 export import graph.back;
-export import process;
+export import utility.process;
+export import dependency.cache;
 using std::chrono::file_clock;
 using std::filesystem::current_path,std::filesystem::file_time_type,std::filesystem::path,std::filesystem::recursive_directory_iterator;
 using std::views::keys,std::views::zip;
 using namespace std;
 using namespace chrono_literals;
-constexpr string_view CBP_ALLOWED_EXTENSIONS="c++ c++m cc ccm cpp cppm cxx cxxm";
-constexpr char OPENING='[';
-constexpr char CLOSING=']';
 export struct ModuleCompilation
 {
 	vector<ImportUnit>dependency;
@@ -45,13 +43,13 @@ class ProgramBuilder
 	BuildConfiguration options;
 	vector<string>linkerArguments;
 	ForwardGraph graph;
-	CompilerConfigurer flagger;
+	unique_ptr<BaseCompilerConfigurer>compiler;
 	ProjectGraph back;
 	ParallelProcessManager pm;
 public:
-	ProgramBuilder(ProgramBuilderConstructorTag,pair<CompilerType,vector<string>>tai,BuildConfiguration op)
+	ProgramBuilder(ProgramBuilderConstructorTag,unique_ptr<BaseCompilerConfigurer>&&c,BuildConfiguration op)
 		noexcept
-		:options(std::move(op)),linkerArguments(),graph(),flagger(tai.first,std::move(tai.second)),back(options,flagger),pm(op.threadCount)
+		:options(std::move(op)),linkerArguments(),graph(),compiler(std::move(c)),back(options,*compiler),pm(options.threadCount)
 	{}
 	ProgramBuilder()=delete;
 	ProgramBuilder(const ProgramBuilder&)=delete;
@@ -114,56 +112,6 @@ public:
 			create_directory(d);
 		}
 	}
-	void parseDependencies(istream&in)
-	{
-		string ln;
-		string current;
-		array<string,3>stringFields;
-		bool external=false;
-		vector<ImportUnit>imports;
-		size_t index=0;
-		bool inside=false;
-		while(!getline(in,ln).eof())
-		{
-			if(ln.front()==OPENING)
-			{
-				imports.clear();
-				index=0;
-				inside=true;
-			}
-			else if(ln.front()==CLOSING)
-			{
-				back.addEntry(std::move(current),std::move(stringFields[0]),path{stringFields[1]},path{stringFields[2]},std::move(imports),external);
-				inside=false;
-			}
-			else if(inside)
-			{
-				if(index<stringFields.size())
-				{
-					stringFields[index]=std::move(ln);
-				}
-				else if(index==stringFields.size())
-				{
-					external=ln!="false";
-				}
-				else
-				{
-					const size_t ind=ln.find_last_of(',');
-					ImportType type=MODULE;
-					if(ind!=string::npos)
-					{
-						type=static_cast<ImportType>(stoi(ln.substr(ind+1)));
-					}
-					imports.emplace_back(ln.substr(0,ind),type);
-				}
-				++index;
-			}
-			else
-			{
-				current=std::move(ln);
-			}
-		}
-	}
 	bool loadedDependencies()
 	{
 		bool loaded=false;
@@ -173,7 +121,7 @@ public:
 			loaded=ifs.is_open();
 			if(loaded)
 			{
-				parseDependencies(ifs);
+				parseDependencies(back,ifs);
 			}
 			println("loaded {}",loaded);
 		}
@@ -183,25 +131,13 @@ public:
 		const
 	{
 		ofstream ofs(string{options.dependencyCache()});
-		for(const auto&[filepath,filedata]:back)
-		{
-			if(!filedata.external||filedata.module.size())
-			{
-				println(ofs,"{}\n{}",filepath,OPENING);
-				println(ofs,"{}\n{}\n{}\n{}",filedata.module,filedata.preprocessed.string(),filedata.object.string(),filedata.external);
-				for(const ImportUnit&i:filedata.depend)
-				{
-					println(ofs,"{},{}",i.name,to_underlying(i.type));
-				}
-				print(ofs,"{}\n",CLOSING);
-			}
-		}
+		dumpDependencies(back,ofs);
 	}
 	void cpbuild()
 	{
 		constexpr string EMPTYSTRING="";
 		span<string_view>targets=options.targets;
-		flagger.addArguments(options);
+		compiler->addArguments(options);
 		println("{}",targets);
 		bool dependencyHasBeenLoaded=loadedDependencies();
 		if(!dependencyHasBeenLoaded)
@@ -233,37 +169,31 @@ public:
 				bool needStdCompat=!(stdModules>>1&1);
 				if(needStd)
 				{
-					add_file(flagger.getSTDModulePath(),true);
+					add_file(compiler->getSTDModulePath(),true);
 				}
 				if(needStdCompat)
 				{
-					add_file(flagger.getSTDCompatModulePath(),true);
+					add_file(compiler->getSTDCompatModulePath(),true);
 				}
 			}
 			else
 			{
-				if(flagger.getCompilerType()==LLVM)
+				if(compiler->getCompilerType()==LLVM)
 				{
-					add_file(path{flagger.getSTDModulePath()},true);
-					add_file(path{flagger.getSTDCompatModulePath()},true);
+					add_file(path{compiler->getSTDModulePath()},true);
+					add_file(path{compiler->getSTDCompatModulePath()},true);
 				}
-				/*for(path t:flagger.getIncludeDirectories())
-				{
-					add_directory(t,true);
-				}*/
 			}
 			back.convertDependenciesToPath();
 		}
 		unordered_set<string_view>unresolvedImports;
 		for(const auto&[filepath,filedata]:back)
 		{
-			println("module and path {} {}",filepath,filedata.module);
 			for(const auto&[i,resolved]:filedata.dependResolved())
 			{
-				println("zipped {} {}",i.name,(int)resolved);
 				if(!resolved)
 				{
-					vector<path>potential=flagger.searchForLikelyCandidates(i.name);
+					vector<path>potential=compiler->searchForLikelyCandidates(i.name);
 					bool found=false;
 					for(path&p:potential)
 					{
@@ -289,7 +219,7 @@ public:
 				}
 			}
 		}
-		auto filesToTry=ranges::to<vector<path>>(flagger.getPotentialModuleFiles());
+		auto filesToTry=ranges::to<vector<path>>(compiler->getPotentialModuleFiles());
 		for(string_view sv:unresolvedImports)
 		{
 			println("unresolved {}",sv);
@@ -371,7 +301,7 @@ public:
 					{
 						swap(pps,node.name);
 					}
-					auto arguments=flagger.compileFile(node.name,outputfile,get<0>(requiredTrio),get<2>(requiredTrio),options,node.notInterface,node.header);
+					auto arguments=compiler->getCompileCommand(node.name,outputfile,get<0>(requiredTrio),get<2>(requiredTrio),options,node.notInterface,node.header);
 					auto opid=pm.run(arguments,options.isDisplayCommand());
 					if(exchange)
 					{
@@ -421,17 +351,17 @@ public:
 		}
 		pm.wait_remaining_processes();
 		string product=getFinalOutputFile().string();
-		auto arguments=flagger.linkProgram(product,options,linkerArguments);
+		auto arguments=compiler->linkProgram(product,options,linkerArguments);
 		pm.run(arguments,options.isDisplayCommand());
 		pm.wait_remaining_processes();
 	}
 	~ProgramBuilder()=default;
-	static ProgramBuilder&getInstance(pair<CompilerType,vector<string>>tai,BuildConfiguration options)
+	static ProgramBuilder&getInstance(unique_ptr<BaseCompilerConfigurer>&&compiler,BuildConfiguration options)
 		noexcept
 	{
 		if(!singletonPointerProgramBuilder)
 		{
-			singletonPointerProgramBuilder=make_unique<ProgramBuilder>(ProgramBuilderConstructorTag{},std::move(tai),std::move(options));
+			singletonPointerProgramBuilder=make_unique<ProgramBuilder>(ProgramBuilderConstructorTag{},std::move(compiler),std::move(options));
 		}
 		return*singletonPointerProgramBuilder;
 	}

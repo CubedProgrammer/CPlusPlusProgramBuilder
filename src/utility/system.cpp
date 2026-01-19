@@ -3,7 +3,7 @@ module;
 #include<fcntl.h>
 #include<sys/wait.h>
 #include<unistd.h>
-export module utils;
+export module utility.system;
 export import std;
 using namespace std;
 export struct ModulePathSimilarity

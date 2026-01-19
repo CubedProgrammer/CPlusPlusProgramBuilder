@@ -1,5 +1,5 @@
-export module process;
-export import utils;
+export module utility.process;
+export import utility.system;
 using namespace std;
 export class ParallelProcessManager
 {
@@ -11,7 +11,7 @@ public:
 		noexcept
 		:maximum(m),needToWait(false),processes()
 	{}
-	optional<unsigned>run(span<char*>args,bool printCommand)
+	optional<unsigned>run(span<string_view>args,bool printCommand)
 	{
 		if(needToWait)
 		{
@@ -32,7 +32,7 @@ public:
 		if(printCommand)
 		{
 			bool notFirst=false;
-			for(char*a:args.first(args.size()-1))
+			for(string_view a:args)
 			{
 				if(notFirst)
 				{
@@ -46,7 +46,11 @@ public:
 			}
 			print("\n");
 		}
-		auto oid=launch_program(args);
+		vector<char*>trueArgs;
+		trueArgs.reserve(args.size()+1);
+		trueArgs.append_range(views::transform(args,svConstCaster));
+		trueArgs.push_back(nullptr);
+		auto oid=launch_program(trueArgs);
 		if(oid)
 		{
 			processes.insert((unsigned)*oid);

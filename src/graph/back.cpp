@@ -1,5 +1,5 @@
 export module graph.back;
-export import flag;
+export import compiler.factory;
 export import graph.front;
 using namespace std;
 using filesystem::path;
@@ -48,10 +48,10 @@ export class ProjectGraph
 	unordered_map<string,string>moduleToFile;
 	array<unordered_map<string,FileData>,2>files;
 	const BuildConfiguration*configuration;
-	const CompilerConfigurer*flagger;
+	const BaseCompilerConfigurer*flagger;
 public:
 	using iterator=ProjectGraphIterator;
-	ProjectGraph(const BuildConfiguration&configuration,const CompilerConfigurer&flagger)
+	ProjectGraph(const BuildConfiguration&configuration,const BaseCompilerConfigurer&flagger)
 		:moduleToFile(),files(),configuration(&configuration),flagger(&flagger)
 	{}
 	ProjectGraph()
@@ -103,10 +103,6 @@ public:
 					files[external].erase(it);
 					io.reset();
 				}
-				/*if(p.string().starts_with("/usr/include/octave-10.3.0/octave/"))
-				{
-					println("external {} {} {}",moduleData.name,it->second.external,p.string());
-				}*/
 			}
 			else
 			{
