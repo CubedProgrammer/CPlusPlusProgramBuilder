@@ -2,9 +2,10 @@ export module dependency.cache;
 export import graph.back;
 using namespace std;
 using filesystem::path;
+using views::zip;
 constexpr char OPENING='[';
 constexpr char CLOSING=']';
-export void parseDependencies(ProjectGraph&g,istream&in)
+export bool parseDependencies(ProjectGraph&g,istream&in)
 {
 	string ln;
 	string current;
@@ -13,6 +14,7 @@ export void parseDependencies(ProjectGraph&g,istream&in)
 	vector<ImportUnit>imports;
 	size_t index=0;
 	bool inside=false;
+	bool atLeastOneUpdated=false;
 	while(!getline(in,ln).eof())
 	{
 		if(ln.front()==OPENING)
@@ -23,7 +25,18 @@ export void parseDependencies(ProjectGraph&g,istream&in)
 		}
 		else if(ln.front()==CLOSING)
 		{
-			g.addEntry(std::move(current),std::move(stringFields[0]),path{stringFields[1]},path{stringFields[2]},std::move(imports),external);
+			path source(current);
+			path preprocessed(stringFields[1]);
+			bool updated=isMoreRecent(source,preprocessed);
+			if(updated)
+			{
+				atLeastOneUpdated=true;
+				g.addFile(std::move(source),external);
+			}
+			else
+			{
+				g.addEntry(std::move(current),std::move(stringFields[0]),std::move(preprocessed),path{stringFields[2]},std::move(imports),external);
+			}
 			inside=false;
 		}
 		else if(inside)
@@ -53,6 +66,7 @@ export void parseDependencies(ProjectGraph&g,istream&in)
 			current=std::move(ln);
 		}
 	}
+	return atLeastOneUpdated;
 }
 export void dumpDependencies(const ProjectGraph&g,ostream&out)
 {
@@ -67,6 +81,70 @@ export void dumpDependencies(const ProjectGraph&g,ostream&out)
 				println(out,"{},{}",i.name,to_underlying(i.type));
 			}
 			print(out,"{}\n",CLOSING);
+		}
+	}
+}
+export void resolveUnresolvedDependencies(ProjectGraph&g)
+{
+	unordered_set<string_view>unresolvedImports;
+	for(const auto&[filepath,filedata]:g)
+	{
+		for(const auto&[i,resolved]:filedata.dependResolved())
+		{
+			if(!resolved)
+			{
+				vector<path>potential=g.getCompiler()->searchForLikelyCandidates(i.name);
+				bool found=false;
+				for(path&p:potential)
+				{
+					auto itO=g.addFile(std::move(p),true);
+					if(itO)
+					{
+						auto&it1=*itO;
+						if(it1->second.module==i.name)
+						{
+							found=true;
+							break;
+						}
+						else
+						{
+							g.erase(it1);
+						}
+					}
+				}
+				if(!found)
+				{
+					unresolvedImports.insert(i.name);
+				}
+			}
+		}
+	}
+	auto filesToTry=ranges::to<vector<path>>(g.getCompiler()->getPotentialModuleFiles());
+	for(string_view sv:unresolvedImports)
+	{
+		println("unresolved {}",sv);
+		auto scores=views::transform(filesToTry,[sv](const path&m){string n=m.stem().string();return similarity(sv,n);});
+		auto scoresVector=ranges::to<vector<ModulePathSimilarity>>(scores);
+		ranges::sort(zip(scoresVector,filesToTry),ranges::greater());
+		for(path t:filesToTry)
+		{
+			string ts=t.stem().string();
+			auto sim=similarity(sv,ts);
+			println("{} {} {}",ts,sim.lcs,sim.remaining);
+			auto iteratorOpt=g.addFile(std::move(t),true);
+			if(iteratorOpt)
+			{
+				auto&it1=*iteratorOpt;
+				if(it1->second.module==sv)
+				{
+					println("found {}",t.string());
+					break;
+				}
+				else
+				{
+					g.erase(it1);
+				}
+			}
 		}
 	}
 }

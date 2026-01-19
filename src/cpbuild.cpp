@@ -4,7 +4,7 @@ export import utility.process;
 export import dependency.cache;
 using std::chrono::file_clock;
 using std::filesystem::current_path,std::filesystem::file_time_type,std::filesystem::path,std::filesystem::recursive_directory_iterator;
-using std::views::keys,std::views::zip;
+using std::views::keys;
 using namespace std;
 using namespace chrono_literals;
 export struct ModuleCompilation
@@ -82,10 +82,6 @@ public:
 			return path{options.artifact()};
 		}
 	}
-	auto add_file(path&&p,bool externalDirectory=false)
-	{
-		return back.addFile(p,externalDirectory);
-	}
 	void add_directory(const path&p,bool externalDirectory=false)
 	{
 		using namespace string_view_literals;
@@ -100,7 +96,7 @@ public:
 			path current=en.path();
 			if(current.has_extension()&&isExtensionPermitted(current))
 			{
-				add_file(path(current),externalDirectory);
+				back.addFile(path(current),externalDirectory);
 				if(!externalDirectory&&options.objectDirectory().size())
 				{
 					directoriesToCreate.insert(getOutputFile(current.remove_filename()));
@@ -121,7 +117,12 @@ public:
 			loaded=ifs.is_open();
 			if(loaded)
 			{
-				parseDependencies(back,ifs);
+				if(parseDependencies(back,ifs))
+				{
+					back.buildModuleMap();
+					back.convertDependenciesToPath();
+					resolveUnresolvedDependencies(back);
+				}
 			}
 			println("loaded {}",loaded);
 		}
@@ -150,7 +151,7 @@ public:
 				}
 				else
 				{
-					add_file(std::move(t));
+					back.addFile(std::move(t),false);
 				}
 			}
 			if(options.moduleMapCache().size())
@@ -161,7 +162,7 @@ public:
 				{
 					if(line.size())
 					{
-						add_file(path{line},true);
+						back.addFile(path{line},true);
 					}
 				}
 				unsigned stdModules=back.checkForStandardModules();
@@ -169,84 +170,24 @@ public:
 				bool needStdCompat=!(stdModules>>1&1);
 				if(needStd)
 				{
-					add_file(compiler->getSTDModulePath(),true);
+					back.addFile(compiler->getSTDModulePath(),true);
 				}
 				if(needStdCompat)
 				{
-					add_file(compiler->getSTDCompatModulePath(),true);
+					back.addFile(compiler->getSTDCompatModulePath(),true);
 				}
 			}
 			else
 			{
 				if(compiler->getCompilerType()==LLVM)
 				{
-					add_file(path{compiler->getSTDModulePath()},true);
-					add_file(path{compiler->getSTDCompatModulePath()},true);
+					back.addFile(path{compiler->getSTDModulePath()},true);
+					back.addFile(path{compiler->getSTDCompatModulePath()},true);
 				}
 			}
 			back.convertDependenciesToPath();
 		}
-		unordered_set<string_view>unresolvedImports;
-		for(const auto&[filepath,filedata]:back)
-		{
-			for(const auto&[i,resolved]:filedata.dependResolved())
-			{
-				if(!resolved)
-				{
-					vector<path>potential=compiler->searchForLikelyCandidates(i.name);
-					bool found=false;
-					for(path&p:potential)
-					{
-						auto itO=add_file(std::move(p),true);
-						if(itO)
-						{
-							auto&it1=*itO;
-							if(it1->second.module==i.name)
-							{
-								found=true;
-								break;
-							}
-							else
-							{
-								back.erase(it1);
-							}
-						}
-					}
-					if(!found)
-					{
-						unresolvedImports.insert(i.name);
-					}
-				}
-			}
-		}
-		auto filesToTry=ranges::to<vector<path>>(compiler->getPotentialModuleFiles());
-		for(string_view sv:unresolvedImports)
-		{
-			println("unresolved {}",sv);
-			auto scores=views::transform(filesToTry,[sv](const path&m){string n=m.stem().string();return similarity(sv,n);});
-			auto scoresVector=ranges::to<vector<ModulePathSimilarity>>(scores);
-			ranges::sort(zip(scoresVector,filesToTry),ranges::greater());
-			for(path t:filesToTry)
-			{
-				string ts=t.stem().string();
-				auto sim=similarity(sv,ts);
-				println("{} {} {}",ts,sim.lcs,sim.remaining);
-				auto iteratorOpt=add_file(std::move(t),true);
-				if(iteratorOpt)
-				{
-					auto&it1=*iteratorOpt;
-					if(it1->second.module==sv)
-					{
-						println("found {}",t.string());
-						break;
-					}
-					else
-					{
-						back.erase(it1);
-					}
-				}
-			}
-		}
+		resolveUnresolvedDependencies(back);
 		if(options.dependencyCache().size())
 		{
 			cacheDependencies();

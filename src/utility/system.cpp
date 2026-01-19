@@ -6,6 +6,7 @@ module;
 export module utility.system;
 export import std;
 using namespace std;
+using filesystem::path;
 export struct ModulePathSimilarity
 {
 	size_t lcs;
@@ -158,4 +159,15 @@ export optional<pair<int,int>>wait(int process)
 export optional<pair<int,int>>wait()
 {
 	return waitflag(0);
+}
+export bool isMoreRecent(const path&a,const path&b)
+{
+	error_code ec;
+	auto sourceTime=last_write_time(a);
+	auto objectTime=last_write_time(b,ec);
+	if(ec)
+	{
+		objectTime=sourceTime-1s;
+	}
+	return sourceTime>objectTime;
 }

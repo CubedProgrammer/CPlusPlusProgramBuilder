@@ -48,15 +48,20 @@ export class ProjectGraph
 	unordered_map<string,string>moduleToFile;
 	array<unordered_map<string,FileData>,2>files;
 	const BuildConfiguration*configuration;
-	const BaseCompilerConfigurer*flagger;
+	BaseCompilerConfigurer*flagger;
 public:
 	using iterator=ProjectGraphIterator;
-	ProjectGraph(const BuildConfiguration&configuration,const BaseCompilerConfigurer&flagger)
+	ProjectGraph(const BuildConfiguration&configuration,BaseCompilerConfigurer&flagger)
 		:moduleToFile(),files(),configuration(&configuration),flagger(&flagger)
 	{}
 	ProjectGraph()
 		:moduleToFile(),files(),configuration(),flagger()
 	{}
+	BaseCompilerConfigurer*getCompiler()
+		noexcept
+	{
+		return flagger;
+	}
 	constexpr iterator begin()
 		const
 	{
@@ -70,7 +75,7 @@ public:
 	void addEntry(string p,string module,path preprocessed,path object,vector<ImportUnit>&&imports,bool external)
 	{
 		size_t icount=imports.size();
-		auto[it,succ]=files[external].insert({std::move(p),{std::move(module),std::move(preprocessed),std::move(object),std::move(imports),vector<char>(icount),external}});
+		auto[it,succ]=files[external].insert({std::move(p),{std::move(module),std::move(preprocessed),std::move(object),std::move(imports),vector<char>(icount,true),external}});
 		if(succ)
 		{
 			it->second.eraseDuplicateImports();
@@ -149,6 +154,13 @@ public:
 			erase_if(data.depend,[](const ImportUnit&unit){return unit.name.size()==0;});
 		}
 		moduleToFile.clear();
+	}
+	void buildModuleMap()
+	{
+		for(const auto&[p,d]:*this)
+		{
+			moduleToFile.insert({d.module,p});
+		}
 	}
 	void erase(iterator it)
 	{

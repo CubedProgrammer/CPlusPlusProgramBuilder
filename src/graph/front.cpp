@@ -36,14 +36,7 @@ export struct ForwardGraph
 	void insert(string_view pathString,const FileData&fdata,unsigned forceLevel,function<optional<const pair<const string,FileData>*>(string_view)>query)
 	{
 		path p(pathString);
-		error_code ec;
-		auto sourceTime=last_write_time(p);
-		auto objectTime=last_write_time(fdata.object,ec);
-		if(ec)
-		{
-			objectTime=sourceTime-1s;
-		}
-		bool updated=sourceTime>objectTime;
+		bool updated=isMoreRecent(p,fdata.object);
 		bool toCompile=(forceLevel>>fdata.external&1)||updated;
 		auto[it,succ]=graph.insert({{string{pathString},fdata.module.size()==0,false,fdata.external},{{},static_cast<uint16_t>(fdata.depend.size()),toCompile}});
 		if(!succ)
