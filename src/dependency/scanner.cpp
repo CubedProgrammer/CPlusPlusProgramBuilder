@@ -26,12 +26,15 @@ export path replaceMove(const BuildConfiguration&options,path file,const path&ex
 	}
 	if(options.objectDirectory().size())
 	{
-		if(options.targets.size()==1)
+		string pathString=file.string();
+		if(options.targets.size()==1&&pathString.starts_with(options.targets[0]))
 		{
-			string pathString=file.string();
-			size_t index=pathString.rfind('/')+1;
-			string_view sv{pathString.cbegin()+index,pathString.cend()};
-			file=sv;
+			const size_t index=pathString.find_first_not_of('/',options.targets[0].size());
+			if(index!=string::npos)
+			{
+				string_view sv{pathString.cbegin()+index,pathString.cend()};
+				file=sv;
+			}
 		}
 		file=path{options.objectDirectory()}/file.relative_path();
 	}

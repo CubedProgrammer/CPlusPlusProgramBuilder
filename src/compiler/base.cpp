@@ -13,12 +13,12 @@ constexpr string_view CBP_LANGUAGE_VERSION="-std=c++20";
 export constexpr string_view CBP_STDLIB_FLAG="-stdlib=libc++";
 export constexpr string_view CBP_HEADER_LANGUAGE="c++-user-header";
 constexpr string_view CBP_ALLOWED_EXTENSIONS="c++ c++m cc ccm cpp cppm cxx cxxm";
-string prependOutputDirectory(string file,string_view outputDirectory,bool isGCC)
+export enum CompilerType
 {
-	if(isGCC)
-	{
-		outputDirectory=outputDirectory.size()>0?outputDirectory:"gcm.cache";
-	}
+	LLVM,GNU
+};
+string prependOutputDirectory(string file,string_view outputDirectory)
+{
 	if(outputDirectory.size())
 	{
 		string temp{outputDirectory};
@@ -28,10 +28,6 @@ string prependOutputDirectory(string file,string_view outputDirectory,bool isGCC
 	}
 	return file;
 }
-export enum CompilerType
-{
-	LLVM,GNU
-};
 export bool isExtensionPermitted(const path&p)
 	noexcept
 {
@@ -94,7 +90,7 @@ public:
 		if(name.size())
 		{
 			file+=getModuleExtension();
-			file=prependOutputDirectory(file,outputDirectory,type==GNU);
+			file=prependOutputDirectory(file,outputDirectory);
 		}
 		return file;
 	}
@@ -126,7 +122,7 @@ public:
 	{
 		string s(name);
 		s+=".pcm";
-		return prependOutputDirectory(std::move(s),outputDirectory,type==GNU);
+		return prependOutputDirectory(std::move(s),outputDirectory);
 	}
 	vector<path>searchForLikelyCandidates(string_view name)
 	{
