@@ -201,10 +201,14 @@ public:
 			{
 				if(unit.type==MODULE)
 				{
-					auto[_,succ]=visited.insert(unit.name);
-					if(succ)
+					auto it=files[1].find(unit.name);
+					if(it!=files[1].end())
 					{
-						q.push(unit.name);
+						auto[_,succ]=visited.insert(unit.name);
+						if(succ)
+						{
+							q.push(unit.name);
+						}
 					}
 				}
 			}
@@ -219,6 +223,7 @@ export ForwardGraph makeForwardGraph(const ProjectGraph&pg,bool forceRecompile,b
 	auto queryFunction=bind_front(&ProjectGraph::query,pg);
 	for(const auto&[pathString,fdata]:pg.getProjectFiles())
 	{
+		println("inserting {}",pathString);
 		g.insert(pathString,fdata,forceLevel,queryFunction);
 	}
 	auto[q,visited]=pg.getExternalImports();
