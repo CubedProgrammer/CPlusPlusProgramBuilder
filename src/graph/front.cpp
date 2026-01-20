@@ -53,7 +53,6 @@ export struct ForwardGraph
 				auto&[_,dependData]=**entryO;
 				external=dependData.external;
 			}
-			println("iu.name {}",iu.name);
 			ForwardGraphNode node{iu.name,false,iu.type!=MODULE,external};
 			auto[itN,_]=graph.insert({std::move(node),{{},0,false}});
 			itN->second.dependent.push_back(it->first);

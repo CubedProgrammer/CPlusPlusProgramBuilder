@@ -66,7 +66,7 @@ export optional<path>preprocess(const BuildConfiguration&options,const path&file
 	auto pid=launch_program(preprocessCommand);
 	if(pid)
 	{
-		auto res=wait(*pid);
+		auto res=wait(pid->second);
 		if(res&&res->second!=0)
 		{
 			println(cerr,"preprocessing {} failed with exit code {}",fileString,res->second);
@@ -110,7 +110,6 @@ vector<string>tokenizeData(const BuildConfiguration&configuration,const path&fil
 	bool inAngleBracket=false;
 	bool*stringOrCharPointer=nullptr;
 	string result=readEntireFile(file);
-	size_t lc;
 	size_t currentIndex=0;
 	size_t beginIndex=0;
 	for(char&c:result)

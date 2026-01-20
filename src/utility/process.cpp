@@ -53,10 +53,10 @@ public:
 		auto oid=launch_program(trueArgs);
 		if(oid)
 		{
-			processes.insert((unsigned)*oid);
+			processes.insert((unsigned)oid->second);
 			needToWait=(uint8_t)processes.size()==maximum;
 		}
-		return oid;
+		return oid.transform([](const pair<string,int>&m){return(unsigned)m.second;});
 	}
 	optional<unsigned>wait_any_process()
 	{

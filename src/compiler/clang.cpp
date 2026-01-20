@@ -24,17 +24,22 @@ public:
 		string second="/usr/share/libc++/v1/"+name+".cppm";
 		return exists(path{first})?first:second;
 	}
+	virtual void addSpecificPreprocessArguments(vector<char*>&args)
+		const
+	{
+		args.push_back(svConstCaster(CBP_STDLIB_FLAG));
+	}
 	virtual void addCompilerSpecificArguments(const BuildConfiguration&configuration)
 	{
-		const char*flagData=CBP_CLANG_MODULE_PATH.data();
+		string_view flag=CBP_CLANG_MODULE_PATH;
 		if(configuration.objectDirectory().size())
 		{
 			clangPrebuiltModuleFlag=string{CBP_CLANG_MODULE_PATH.data(),CBP_CLANG_MODULE_PATH.size()-1};
 			clangPrebuiltModuleFlag.append_range(configuration.objectDirectory());
-			flagData=clangPrebuiltModuleFlag.data();
+			flag=clangPrebuiltModuleFlag;
 		}
-		compilerArguments.push_back(const_cast<char*>(CBP_STDLIB_FLAG.data()));
-		compilerArguments.push_back(const_cast<char*>(flagData));
+		compilerArguments.push_back(CBP_STDLIB_FLAG);
+		compilerArguments.push_back(flag);
 	}
 	virtual void compilerSpecificArgumentsForFile(vector<string_view>&output,const string&filename,const string&outputname,const string&moduleName,span<const ImportUnit>imports,const BuildConfiguration&configuration,bool notInterface,bool isHeader)
 	{

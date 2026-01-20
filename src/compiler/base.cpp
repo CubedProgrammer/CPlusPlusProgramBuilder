@@ -173,6 +173,10 @@ public:
 		}
 		return candidates;
 	}
+	virtual void addSpecificPreprocessArguments(vector<char*>&args)
+		const
+	{}
+	//virtual optional<path>preprocess(const BuildConfiguration&options,const path&file)=0;
 	virtual void addCompilerSpecificArguments(const BuildConfiguration&configuration)=0;
 	void addArguments(const BuildConfiguration&configuration)
 	{

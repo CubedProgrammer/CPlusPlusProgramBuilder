@@ -12,7 +12,7 @@ CompilerType getCompilerType(const BuildConfiguration&configuration)
 {
 	CompilerType type=LLVM;
 	vector<char*>args{svConstCaster(configuration.compiler()),svConstCaster(CBP_VERSION_FLAG)};
-	auto data=run_and_get_output(args);
+	auto data=launch_program(args,PIPE_OUTPUT);
 	if(data)
 	{
 		if(data->second==0)
@@ -47,7 +47,7 @@ export unique_ptr<BaseCompilerConfigurer>getCompiler(const BuildConfiguration&co
 	args.push_back(svConstCaster(CBP_OUTPUT_FLAG));
 	args.push_back(svConstCaster(CBP_NULL_DEVICE));
 	args.push_back(nullptr);
-	optional<pair<string,int>>dataO=run_and_get_output(args);
+	optional<pair<string,int>>dataO=launch_program(args,PIPE_ERROR);
 	vector<string>directories;
 	if(dataO&&dataO->second==0)
 	{
