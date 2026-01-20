@@ -4,6 +4,8 @@ using namespace std;
 using filesystem::path;
 constexpr string_view CBP_CLANG_MODULE_PATH="-fprebuilt-module-path=.";
 constexpr string_view CBP_CLANG_PRECOMPILE_FLAG="--precompile";
+constexpr string_view CLANG_HEADER_ERROR_BEGIN="error: header file ";
+constexpr string_view CLANG_HEADER_ERROR_END=" cannot be imported because it is not known to be a header unit";
 export class ClangConfigurer:public BaseCompilerConfigurer
 {
 	string clangPrebuiltModuleFlag;
@@ -28,6 +30,18 @@ public:
 		const
 	{
 		args.push_back(svConstCaster(CBP_STDLIB_FLAG));
+	}
+	virtual optional<ModuleData>onPreprocessError(const BuildConfiguration&configuration,const path&file,const string&error)
+	{
+		optional<ModuleData>mdO;
+		size_t beginIndex=0;
+		size_t endIndex=0;
+		while(beginIndex!=string::npos)
+		{
+			beginIndex=error.find(CLANG_HEADER_ERROR_BEGIN,endIndex);
+			endIndex=error.find(CLANG_HEADER_ERROR_END,beginIndex);
+		}
+		return mdO;
 	}
 	virtual void addCompilerSpecificArguments(const BuildConfiguration&configuration)
 	{

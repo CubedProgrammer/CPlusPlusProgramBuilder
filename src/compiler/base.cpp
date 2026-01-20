@@ -176,7 +176,60 @@ public:
 	virtual void addSpecificPreprocessArguments(vector<char*>&args)
 		const
 	{}
-	//virtual optional<path>preprocess(const BuildConfiguration&options,const path&file)=0;
+	pair<optional<path>,optional<string>>preprocess(const BuildConfiguration&options,const path&file)
+	{
+		optional<path>outOpt;
+		optional<string>errOpt;
+		path out=replaceMove(options,file,path{"ii"});
+		string fileString=file.string();
+		string outString=out.string();
+		char preprocessOption[]="-E";
+		char outOption[]="-o";
+		vector<char*>preprocessCommand;
+		create_directories(out.parent_path());
+		preprocessCommand.reserve(options.compilerOptions.size()+7);
+		preprocessCommand.push_back(svConstCaster(options.compiler()));
+		addSpecificPreprocessArguments(preprocessCommand);
+		preprocessCommand.push_back(preprocessOption);
+		preprocessCommand.append_range(views::transform(options.compilerOptions,svConstCaster));
+		preprocessCommand.push_back(svConstCaster(fileString));
+		preprocessCommand.push_back(outOption);
+		preprocessCommand.push_back(svConstCaster(outString));
+		preprocessCommand.push_back(nullptr);
+		auto pid=launch_program(preprocessCommand,PIPE_ERROR);
+		if(pid)
+		{
+			if(pid->second!=0)
+			{
+				println(cerr,"preprocessing {} failed with exit code {}",fileString,pid->second);
+			}
+			else
+			{
+				outOpt=std::move(out);
+			}
+			errOpt=std::move(pid->first);
+		}
+		else
+		{
+			println(cerr,"preprocessing {} failed",fileString);
+		}
+		return{std::move(outOpt),std::move(errOpt)};
+	}
+	virtual optional<ModuleData>onPreprocessError(const BuildConfiguration&configuration,const path&file,const string&error)=0;
+	optional<ModuleData>scanImports(const BuildConfiguration&configuration,const path&file)
+	{
+		optional<ModuleData>dataO;
+		auto[pathO,errorO]=preprocess(configuration,file);
+		if(pathO)
+		{
+			dataO=parseModuleData(configuration,*pathO);
+		}
+		else if(errorO)
+		{
+			dataO=onPreprocessError(configuration,file,*errorO);
+		}
+		return dataO;
+	}
 	virtual void addCompilerSpecificArguments(const BuildConfiguration&configuration)=0;
 	void addArguments(const BuildConfiguration&configuration)
 	{

@@ -1,6 +1,7 @@
 export module compiler.gcc;
 export import compiler.base;
 using namespace std;
+using filesystem::path;
 constexpr string_view CBP_GCC_MODULE_FLAG="-fmodules";
 export class GCCConfigurer:public BaseCompilerConfigurer
 {
@@ -21,6 +22,11 @@ public:
 		const noexcept
 	{
 		return".gcm";
+	}
+	virtual optional<ModuleData>onPreprocessError(const BuildConfiguration&configuration,const path&file,const string&error)
+	{
+		print("{}",error);
+		return nullopt;
 	}
 	virtual void addCompilerSpecificArguments(const BuildConfiguration&configuration)
 	{
