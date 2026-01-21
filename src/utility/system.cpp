@@ -68,10 +68,10 @@ export optional<pair<string,int>>launch_program(span<char*>arguments,unsigned pi
 			int status;
 			long cnt;
 			oResult=pair<string,int>({},0);
+			close(fds[1]);
 			if(pipeTarget!=PIPE_NOTHING)
 			{
 				array<char,8192>buffer;
-				close(fds[1]);
 				while((cnt=read(fds[0],buffer.data(),buffer.size()))>0)
 				{
 					oResult->first.append_range(span(buffer.data(),buffer.data()+cnt));
@@ -93,8 +93,14 @@ export optional<pair<string,int>>launch_program(span<char*>arguments,unsigned pi
 		{
 			if(pipeTarget!=PIPE_NOTHING)
 			{
-				dup2(fds[1],STDOUT_FILENO);
-				dup2(fds[1],STDERR_FILENO);
+				if(pipeTarget==PIPE_OUTPUT)
+				{
+					dup2(fds[1],STDOUT_FILENO);
+				}
+				else
+				{
+					dup2(fds[1],STDERR_FILENO);
+				}
 				close(fds[0]);
 				close(fds[1]);
 			}

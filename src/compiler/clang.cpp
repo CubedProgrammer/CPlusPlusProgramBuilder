@@ -2,6 +2,7 @@ export module compiler.clang;
 export import compiler.base;
 using namespace std;
 using filesystem::path;
+using views::as_rvalue,views::zip;
 constexpr string_view CBP_CLANG_MODULE_PATH="-fprebuilt-module-path=.";
 constexpr string_view CBP_CLANG_PRECOMPILE_FLAG="--precompile";
 constexpr string_view CLANG_HEADER_ERROR_BEGIN="error: header file ";
@@ -11,6 +12,7 @@ export class ClangConfigurer:public BaseCompilerConfigurer
 	string clangPrebuiltModuleFlag;
 	string clangModulePath;
 	vector<string>clangHeaderFlagStorage;
+	vector<string>clangHeaderOutputs;
 public:
 	static constexpr CompilerType TYPE=LLVM;
 	ClangConfigurer(vector<string>id,const BuildConfiguration*c,ParallelProcessManager*m)
@@ -26,15 +28,31 @@ public:
 		string second="/usr/share/libc++/v1/"+name+".cppm";
 		return exists(path{first})?first:second;
 	}
+	virtual void resolveHeaders(span<ImportUnit>units,span<char>resolved)
+		const
+	{
+		for(auto[i,r]:zip(units,resolved))
+		{
+			if(i.type!=MODULE)
+			{
+				r=true;
+			}
+		}
+	}
 	virtual void addSpecificPreprocessArguments(vector<char*>&args)
 		const
 	{
 		args.push_back(svConstCaster(CBP_STDLIB_FLAG));
+		for(const string&s:clangHeaderOutputs)
+		{
+			string_view sv=s;
+			args.push_back(svConstCaster(sv));
+		}
 	}
 	virtual optional<pair<ModuleData,path>>onPreprocessError(const path&file,const string&error)
 	{
 		optional<pair<ModuleData,path>>mdO;
-		vector<string_view>headersImported;
+		vector<ImportUnit>importedHeaders;
 		size_t beginIndex=0;
 		size_t endIndex=0;
 		for(;beginIndex!=string::npos&&endIndex!=string::npos;beginIndex=endIndex+CLANG_HEADER_ERROR_END.size())
@@ -46,9 +64,26 @@ public:
 				string_view info{error.data()+beginIndex+CLANG_HEADER_ERROR_BEGIN.size(),error.data()+endIndex};
 				size_t akaIndex=info.find("aka");
 				string_view pathSV=info.substr(akaIndex+5,info.size()-akaIndex-7);
-				headersImported.push_back(pathSV);
-				println("clang found {}",pathSV);
+				//string pathS=pathSV.front()=='/'?"":"./";
+				//pathS+=pathSV;
+				path pathPath(pathSV);
+				string pathS=absolute(pathPath).string();
+				string outputfile=headerNameToOutput(pathSV,configuration->objectDirectory());
+				compile({pathS,outputfile,""},{},false,true);
+				println("clang found {} {}",pathSV,outputfile);
+				clangHeaderOutputs.push_back("-fmodule-file="+outputfile);
+				importedHeaders.push_back({string{pathSV},SYS_HEADER});
+				//importedHeaders.push_back({std::move(pathS),SYS_HEADER});
 			}
+		}
+		manager->wait_remaining_processes();
+		auto[pathO,_]=preprocess(file);
+		clangHeaderOutputs.clear();
+		if(pathO)
+		{
+			mdO={parseModuleData(*configuration,*pathO),std::move(*pathO)};
+			erase_if(mdO->first.imports,[](const ImportUnit&unit){return unit.type!=MODULE;});
+			mdO->first.imports.append_range(as_rvalue(importedHeaders));
 		}
 		return mdO;
 	}

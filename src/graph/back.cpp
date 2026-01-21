@@ -101,6 +101,7 @@ public:
 					size_t icount=moduleData.imports.size();
 					it->second={std::move(moduleData.name),std::move(moduleDataO->second),std::move(object),std::move(moduleData.imports),vector<char>(icount),external};
 					it->second.eraseDuplicateImports();
+					flagger->resolveHeaders(it->second.depend,it->second.absoluteResolved);
 				}
 				else
 				{
@@ -108,28 +109,6 @@ public:
 					io.reset();
 				}
 			}
-			/*optional<path>preprocessedFile=preprocess(*configuration,p,flagger->getCompilerType()==LLVM);
-			if(preprocessedFile)
-			{
-				ModuleData moduleData=parseModuleData(*configuration,*preprocessedFile);
-				println("module {} {}",p.string(),moduleData.name);
-				if(moduleData.name.size())
-				{
-					moduleToFile.insert({moduleData.name,p.string()});
-				}
-				if(moduleData.name.size()||!external)
-				{
-					path object=external?path{flagger->moduleNameToFile(moduleData.name,configuration->objectDirectory())}:replaceMove(*configuration,p,path{"o"});
-					size_t icount=moduleData.imports.size();
-					it->second={std::move(moduleData.name),std::move(*preprocessedFile),std::move(object),std::move(moduleData.imports),vector<char>(icount),external};
-					it->second.eraseDuplicateImports();
-				}
-				else
-				{
-					files[external].erase(it);
-					io.reset();
-				}
-			}*/
 			else
 			{
 				files[external].erase(it);
@@ -164,6 +143,7 @@ public:
 				else
 				{
 					path p(pathString);
+					println("unit.name {}",unit.name);
 					optional<string>headerPathO=flagger->findHeader(p.parent_path(),unit.name,unit.type==LOCAL_HEADER);
 					if(headerPathO)
 					{

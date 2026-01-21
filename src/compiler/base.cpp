@@ -18,6 +18,25 @@ export enum CompilerType
 {
 	LLVM,GNU
 };
+export path replaceMove(const BuildConfiguration&options,path file,const path&extension)
+{
+	if(file.has_extension())
+	{
+		file.replace_extension(extension);
+	}
+	string_view output=options.objectDirectory().size()==0?".":options.objectDirectory();
+	string pathString=file.string();
+	if(options.targets.size()==1&&pathString.starts_with(options.targets[0]))
+	{
+		const size_t index=pathString.find_first_not_of('/',options.targets[0].size());
+		if(index!=string::npos)
+		{
+			string_view sv{pathString.cbegin()+index,pathString.cend()};
+			file=sv;
+		}
+	}
+	return path{output}/file.relative_path();
+}
 string prependOutputDirectory(string file,string_view outputDirectory)
 {
 	if(outputDirectory.size())
@@ -123,7 +142,19 @@ public:
 	string headerNameToOutput(string_view name,string_view outputDirectory)
 		const
 	{
-		string s(name);
+		string s;
+		s.reserve(name.size()+4);
+		for(char c:name)
+		{
+			if(c=='/')
+			{
+				s+="%2F";
+			}
+			else
+			{
+				s.push_back(c);
+			}
+		}
 		s+=".pcm";
 		return prependOutputDirectory(std::move(s),outputDirectory);
 	}
@@ -176,6 +207,9 @@ public:
 		}
 		return candidates;
 	}
+	virtual void resolveHeaders(span<ImportUnit>units,span<char>resolved)
+		const
+	{}
 	virtual void addSpecificPreprocessArguments(vector<char*>&args)
 		const
 	{}
@@ -205,6 +239,8 @@ public:
 			if(pid->second!=0)
 			{
 				println(cerr,"preprocessing {} failed with exit code {}",fileString,pid->second);
+				//preprocessCommand.pop_back();
+				//println("{}",preprocessCommand);
 			}
 			else
 			{
@@ -255,9 +291,9 @@ public:
 		if(!isHeader)
 		{
 			output.push_back(CBP_COMPILE_FLAG);
-			output.push_back(CBP_OUTPUT_FLAG);
-			output.push_back(outputname);
 		}
+		output.push_back(CBP_OUTPUT_FLAG);
+		output.push_back(outputname);
 		return output;
 	}
 	optional<unsigned>compile(array<string_view,3>names,span<const ImportUnit>imports,bool notInterface,bool isHeader)
