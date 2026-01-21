@@ -54,7 +54,7 @@ int mainpp(span<string_view>args)
 		{
 			configuration.targets.push_back(".");
 		}
-		ProgramBuilder&builder=ProgramBuilder::getInstance(getCompiler(configuration),std::move(configuration));
+		ProgramBuilder&builder=ProgramBuilder::getInstance(std::move(configuration));
 		builder.cpbuild();
 	}
 	return 0;

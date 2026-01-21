@@ -30,7 +30,7 @@ CompilerType getCompilerType(const BuildConfiguration&configuration)
 	}
 	return type;
 }
-export unique_ptr<BaseCompilerConfigurer>getCompiler(const BuildConfiguration&configuration)
+export unique_ptr<BaseCompilerConfigurer>getCompiler(const BuildConfiguration&configuration,ParallelProcessManager*ppm)
 {
 	CompilerType ct=getCompilerType(configuration);
 	vector<char*>args{svConstCaster(configuration.compiler()),svConstCaster(CBP_VERBOSE_FLAG)};
@@ -73,5 +73,5 @@ export unique_ptr<BaseCompilerConfigurer>getCompiler(const BuildConfiguration&co
 	{
 		println(cerr,"Executing {} with arguments {} failed with exit code {}.",configuration.compiler(),views::take(args,args.size()-1),dataO->second);
 	}
-	return ct==GNU?unique_ptr<BaseCompilerConfigurer>(make_unique<GCCConfigurer>(std::move(directories))):unique_ptr<BaseCompilerConfigurer>(make_unique<ClangConfigurer>(std::move(directories)));
+	return ct==GNU?unique_ptr<BaseCompilerConfigurer>(make_unique<GCCConfigurer>(std::move(directories),&configuration,ppm)):unique_ptr<BaseCompilerConfigurer>(make_unique<ClangConfigurer>(std::move(directories),&configuration,ppm));
 }

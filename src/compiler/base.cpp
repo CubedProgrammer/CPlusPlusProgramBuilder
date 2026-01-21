@@ -1,5 +1,6 @@
 export module compiler.base;
 export import dependency.scanner;
+export import utility.process;
 using namespace std;
 using namespace literals;
 using filesystem::path;
@@ -40,14 +41,16 @@ protected:
 	vector<string>includeDirectories;
 	vector<string_view>compilerArguments;
 	vector<path>potentialModuleFiles;
+	const BuildConfiguration*const configuration;
+	ParallelProcessManager*const manager;
 public:
-	BaseCompilerConfigurer(CompilerType ct,vector<string>id)
+	BaseCompilerConfigurer(CompilerType ct,vector<string>id,const BuildConfiguration*c,ParallelProcessManager*m)
 		noexcept
-		:type(ct),includeDirectories(std::move(id)),compilerArguments()
+		:type(ct),includeDirectories(std::move(id)),compilerArguments(),configuration(c),manager(m)
 	{}
 	BaseCompilerConfigurer()
 		noexcept
-		:BaseCompilerConfigurer(LLVM,{})
+		:BaseCompilerConfigurer(LLVM,{},nullptr,nullptr)
 	{}
 	constexpr CompilerType getCompilerType()
 		const noexcept
@@ -176,22 +179,22 @@ public:
 	virtual void addSpecificPreprocessArguments(vector<char*>&args)
 		const
 	{}
-	pair<optional<path>,optional<string>>preprocess(const BuildConfiguration&options,const path&file)
+	pair<optional<path>,optional<string>>preprocess(const path&file)
 	{
 		optional<path>outOpt;
 		optional<string>errOpt;
-		path out=replaceMove(options,file,path{"ii"});
+		path out=replaceMove(*configuration,file,path{"ii"});
 		string fileString=file.string();
 		string outString=out.string();
 		char preprocessOption[]="-E";
 		char outOption[]="-o";
 		vector<char*>preprocessCommand;
 		create_directories(out.parent_path());
-		preprocessCommand.reserve(options.compilerOptions.size()+7);
-		preprocessCommand.push_back(svConstCaster(options.compiler()));
+		preprocessCommand.reserve(configuration->compilerOptions.size()+7);
+		preprocessCommand.push_back(svConstCaster(configuration->compiler()));
 		addSpecificPreprocessArguments(preprocessCommand);
 		preprocessCommand.push_back(preprocessOption);
-		preprocessCommand.append_range(views::transform(options.compilerOptions,svConstCaster));
+		preprocessCommand.append_range(views::transform(configuration->compilerOptions,svConstCaster));
 		preprocessCommand.push_back(svConstCaster(fileString));
 		preprocessCommand.push_back(outOption);
 		preprocessCommand.push_back(svConstCaster(outString));
@@ -215,38 +218,39 @@ public:
 		}
 		return{std::move(outOpt),std::move(errOpt)};
 	}
-	virtual optional<ModuleData>onPreprocessError(const BuildConfiguration&configuration,const path&file,const string&error)=0;
-	optional<ModuleData>scanImports(const BuildConfiguration&configuration,const path&file)
+	virtual optional<pair<ModuleData,path>>onPreprocessError(const path&file,const string&error)=0;
+	optional<pair<ModuleData,path>>scanImports(const path&file)
 	{
-		optional<ModuleData>dataO;
-		auto[pathO,errorO]=preprocess(configuration,file);
+		optional<pair<ModuleData,path>>dataO;
+		auto[pathO,errorO]=preprocess(file);
 		if(pathO)
 		{
-			dataO=parseModuleData(configuration,*pathO);
+			dataO={parseModuleData(*configuration,*pathO),std::move(*pathO)};
 		}
 		else if(errorO)
 		{
-			dataO=onPreprocessError(configuration,file,*errorO);
+			dataO=onPreprocessError(file,*errorO);
 		}
 		return dataO;
 	}
-	virtual void addCompilerSpecificArguments(const BuildConfiguration&configuration)=0;
-	void addArguments(const BuildConfiguration&configuration)
+	virtual void addCompilerSpecificArguments()=0;
+	void addArguments()
 	{
-		compilerArguments.push_back(const_cast<char*>(configuration.compiler().data()));
-		bool addLanguageVersion=ranges::find_if(configuration.compilerOptions,[](string_view sv){return sv.starts_with("-std=");})==configuration.compilerOptions.end();
+		compilerArguments.push_back(configuration->compiler());
+		bool addLanguageVersion=ranges::find_if(configuration->compilerOptions,[](string_view sv){return sv.starts_with("-std=");})==configuration->compilerOptions.end();
 		if(addLanguageVersion)
 		{
 			compilerArguments.push_back(CBP_LANGUAGE_VERSION);
 		}
-		addCompilerSpecificArguments(configuration);
-		compilerArguments.append_range(configuration.compilerOptions);
+		addCompilerSpecificArguments();
+		compilerArguments.append_range(configuration->compilerOptions);
 	}
-	virtual void compilerSpecificArgumentsForFile(vector<string_view>&output,const string&filename,const string&outputname,const string&moduleName,span<const ImportUnit>imports,const BuildConfiguration&configuration,bool notInterface,bool isHeader)=0;
-	vector<string_view>getCompileCommand(const string&filename,const string&outputname,const string&moduleName,span<const ImportUnit>imports,const BuildConfiguration&configuration,bool notInterface,bool isHeader)
+	virtual void compilerSpecificArgumentsForFile(vector<string_view>&output,array<string_view,3>names,span<const ImportUnit>imports,bool notInterface,bool isHeader)=0;
+	vector<string_view>getCompileCommand(array<string_view,3>names,span<const ImportUnit>imports,bool notInterface,bool isHeader)
 	{
 		vector<string_view>output=compilerArguments;
-		compilerSpecificArgumentsForFile(output,filename,outputname,moduleName,imports,configuration,notInterface,isHeader);
+		auto[filename,outputname,_]=names;
+		compilerSpecificArgumentsForFile(output,names,imports,notInterface,isHeader);
 		output.push_back(filename.data());
 		if(!isHeader)
 		{
@@ -256,19 +260,29 @@ public:
 		}
 		return output;
 	}
-	vector<string_view>linkProgram(string_view artifact,BuildConfiguration&configuration,span<string>files)
+	optional<unsigned>compile(array<string_view,3>names,span<const ImportUnit>imports,bool notInterface,bool isHeader)
+	{
+		auto command=getCompileCommand(names,imports,notInterface,isHeader);
+		return manager->run(command,configuration->isDisplayCommand());
+	}
+	vector<string_view>getLinkCommand(string_view artifact,span<const string>files)
 		const
 	{
-		vector<string_view>trueLinkerArguments{configuration.compiler()};
+		vector<string_view>trueLinkerArguments{configuration->compiler()};
 		if(type==LLVM)
 		{
 			trueLinkerArguments.push_back(CBP_STDLIB_FLAG);
 		}
 		trueLinkerArguments.append_range(files);
-		trueLinkerArguments.append_range(configuration.linkerOptions);
+		trueLinkerArguments.append_range(configuration->linkerOptions);
 		trueLinkerArguments.push_back(CBP_OUTPUT_FLAG);
 		trueLinkerArguments.push_back(artifact);
 		return trueLinkerArguments;
+	}
+	void link(string_view artifact,span<const string>files)
+	{
+		auto command=getLinkCommand(artifact,files);
+		manager->run(command,configuration->isDisplayCommand());
 	}
 	virtual~BaseCompilerConfigurer()=default;
 };

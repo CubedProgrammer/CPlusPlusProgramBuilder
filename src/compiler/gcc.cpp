@@ -7,11 +7,11 @@ export class GCCConfigurer:public BaseCompilerConfigurer
 {
 public:
 	static constexpr CompilerType TYPE=GNU;
-	GCCConfigurer(vector<string>id)
-		:BaseCompilerConfigurer(TYPE,std::move(id))
+	GCCConfigurer(vector<string>id,const BuildConfiguration*c,ParallelProcessManager*m)
+		:BaseCompilerConfigurer(TYPE,std::move(id),c,m)
 	{}
 	GCCConfigurer()
-		:GCCConfigurer(vector<string>{})
+		:GCCConfigurer(vector<string>{},nullptr,nullptr)
 	{}
 	virtual string getEitherSTDModulePath(const string&name)
 		const
@@ -23,16 +23,16 @@ public:
 	{
 		return".gcm";
 	}
-	virtual optional<ModuleData>onPreprocessError(const BuildConfiguration&configuration,const path&file,const string&error)
+	virtual optional<pair<ModuleData,path>>onPreprocessError(const path&file,const string&error)
 	{
 		print("{}",error);
 		return nullopt;
 	}
-	virtual void addCompilerSpecificArguments(const BuildConfiguration&configuration)
+	virtual void addCompilerSpecificArguments()
 	{
 		compilerArguments.push_back(CBP_GCC_MODULE_FLAG);
 	}
-	virtual void compilerSpecificArgumentsForFile(vector<string_view>&output,const string&filename,const string&outputname,const string&moduleName,span<const ImportUnit>imports,const BuildConfiguration&configuration,bool notInterface,bool isHeader)
+	virtual void compilerSpecificArgumentsForFile(vector<string_view>&output,array<string_view,3>names,span<const ImportUnit>imports,bool notInterface,bool isHeader)
 	{
 		if(isHeader)
 		{

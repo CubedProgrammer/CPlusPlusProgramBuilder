@@ -13,11 +13,11 @@ export class ClangConfigurer:public BaseCompilerConfigurer
 	vector<string>clangHeaderFlagStorage;
 public:
 	static constexpr CompilerType TYPE=LLVM;
-	ClangConfigurer(vector<string>id)
-		:BaseCompilerConfigurer(TYPE,std::move(id)),clangPrebuiltModuleFlag(),clangModulePath(),clangHeaderFlagStorage()
+	ClangConfigurer(vector<string>id,const BuildConfiguration*c,ParallelProcessManager*m)
+		:BaseCompilerConfigurer(TYPE,std::move(id),c,m),clangPrebuiltModuleFlag(),clangModulePath(),clangHeaderFlagStorage()
 	{}
 	ClangConfigurer()
-		:ClangConfigurer(vector<string>{})
+		:ClangConfigurer(vector<string>{},nullptr,nullptr)
 	{}
 	virtual string getEitherSTDModulePath(const string&name)
 		const
@@ -31,36 +31,46 @@ public:
 	{
 		args.push_back(svConstCaster(CBP_STDLIB_FLAG));
 	}
-	virtual optional<ModuleData>onPreprocessError(const BuildConfiguration&configuration,const path&file,const string&error)
+	virtual optional<pair<ModuleData,path>>onPreprocessError(const path&file,const string&error)
 	{
-		optional<ModuleData>mdO;
+		optional<pair<ModuleData,path>>mdO;
+		vector<string_view>headersImported;
 		size_t beginIndex=0;
 		size_t endIndex=0;
-		while(beginIndex!=string::npos)
+		for(;beginIndex!=string::npos&&endIndex!=string::npos;beginIndex=endIndex+CLANG_HEADER_ERROR_END.size())
 		{
 			beginIndex=error.find(CLANG_HEADER_ERROR_BEGIN,endIndex);
 			endIndex=error.find(CLANG_HEADER_ERROR_END,beginIndex);
+			if(beginIndex!=string::npos&&endIndex!=string::npos)
+			{
+				string_view info{error.data()+beginIndex+CLANG_HEADER_ERROR_BEGIN.size(),error.data()+endIndex};
+				size_t akaIndex=info.find("aka");
+				string_view pathSV=info.substr(akaIndex+5,info.size()-akaIndex-7);
+				headersImported.push_back(pathSV);
+				println("clang found {}",pathSV);
+			}
 		}
 		return mdO;
 	}
-	virtual void addCompilerSpecificArguments(const BuildConfiguration&configuration)
+	virtual void addCompilerSpecificArguments()
 	{
 		string_view flag=CBP_CLANG_MODULE_PATH;
-		if(configuration.objectDirectory().size())
+		if(configuration->objectDirectory().size())
 		{
 			clangPrebuiltModuleFlag=string{CBP_CLANG_MODULE_PATH.data(),CBP_CLANG_MODULE_PATH.size()-1};
-			clangPrebuiltModuleFlag.append_range(configuration.objectDirectory());
+			clangPrebuiltModuleFlag.append_range(configuration->objectDirectory());
 			flag=clangPrebuiltModuleFlag;
 		}
 		compilerArguments.push_back(CBP_STDLIB_FLAG);
 		compilerArguments.push_back(flag);
 	}
-	virtual void compilerSpecificArgumentsForFile(vector<string_view>&output,const string&filename,const string&outputname,const string&moduleName,span<const ImportUnit>imports,const BuildConfiguration&configuration,bool notInterface,bool isHeader)
+	virtual void compilerSpecificArgumentsForFile(vector<string_view>&output,array<string_view,3>names,span<const ImportUnit>imports,bool notInterface,bool isHeader)
 	{
+		string_view moduleName=names[2];
 		clangHeaderFlagStorage.clear();
 		for(const ImportUnit&unit:views::filter(imports,[](const ImportUnit&u){return u.type!=MODULE;}))
 		{
-			clangHeaderFlagStorage.push_back("-fmodule-file="+headerNameToOutput(unit.name,configuration.objectDirectory()));
+			clangHeaderFlagStorage.push_back("-fmodule-file="+headerNameToOutput(unit.name,configuration->objectDirectory()));
 		}
 		output.append_range(clangHeaderFlagStorage);
 		if(isHeader)
@@ -77,7 +87,7 @@ public:
 		if(!notInterface&&!isHeader)
 		{
 			clangModulePath="-fmodule-output=";
-			clangModulePath+=moduleNameToFile(moduleName,configuration.objectDirectory());
+			clangModulePath+=moduleNameToFile(moduleName,configuration->objectDirectory());
 			output.push_back(clangModulePath);
 		}
 	}

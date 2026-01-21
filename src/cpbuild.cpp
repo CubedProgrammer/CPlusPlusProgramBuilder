@@ -45,9 +45,9 @@ class ProgramBuilder
 	ProjectGraph back;
 	ParallelProcessManager pm;
 public:
-	ProgramBuilder(ProgramBuilderConstructorTag,unique_ptr<BaseCompilerConfigurer>&&c,BuildConfiguration op)
+	ProgramBuilder(ProgramBuilderConstructorTag,BuildConfiguration op)
 		noexcept
-		:options(std::move(op)),linkerArguments(),graph(),compiler(std::move(c)),back(options,*compiler),pm(options.threadCount)
+		:options(std::move(op)),linkerArguments(),graph(),compiler(getCompiler(options,&pm)),back(options,*compiler),pm(options.threadCount)
 	{}
 	ProgramBuilder()=delete;
 	ProgramBuilder(const ProgramBuilder&)=delete;
@@ -136,7 +136,7 @@ public:
 	{
 		constexpr string EMPTYSTRING="";
 		span<string_view>targets=options.targets;
-		compiler->addArguments(options);
+		compiler->addArguments();
 		println("{}",targets);
 		bool dependencyHasBeenLoaded=loadedDependencies();
 		if(!dependencyHasBeenLoaded)
@@ -240,8 +240,7 @@ public:
 					{
 						swap(pps,node.name);
 					}
-					auto arguments=compiler->getCompileCommand(node.name,outputfile,get<0>(requiredTrio),get<2>(requiredTrio),options,node.notInterface,node.header);
-					auto opid=pm.run(arguments,options.isDisplayCommand());
+					auto opid=compiler->compile({node.name,outputfile,get<0>(requiredTrio)},get<2>(requiredTrio),node.notInterface,node.header);
 					if(exchange)
 					{
 						swap(pps,node.name);
@@ -290,17 +289,16 @@ public:
 		}
 		pm.wait_remaining_processes();
 		string product=getFinalOutputFile().string();
-		auto arguments=compiler->linkProgram(product,options,linkerArguments);
-		pm.run(arguments,options.isDisplayCommand());
+		compiler->link(product,linkerArguments);
 		pm.wait_remaining_processes();
 	}
 	~ProgramBuilder()=default;
-	static ProgramBuilder&getInstance(unique_ptr<BaseCompilerConfigurer>&&compiler,BuildConfiguration options)
+	static ProgramBuilder&getInstance(BuildConfiguration options)
 		noexcept
 	{
 		if(!singletonPointerProgramBuilder)
 		{
-			singletonPointerProgramBuilder=make_unique<ProgramBuilder>(ProgramBuilderConstructorTag{},std::move(compiler),std::move(options));
+			singletonPointerProgramBuilder=make_unique<ProgramBuilder>(ProgramBuilderConstructorTag{},std::move(options));
 		}
 		return*singletonPointerProgramBuilder;
 	}

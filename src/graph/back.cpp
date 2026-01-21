@@ -87,7 +87,28 @@ public:
 		optional<iterator>io(iterator{&files,it,external});
 		if(success)
 		{
-			optional<path>preprocessedFile=preprocess(*configuration,p,flagger->getCompilerType()==LLVM);
+			optional<pair<ModuleData,path>>moduleDataO=flagger->scanImports(p);
+			if(moduleDataO)
+			{
+				ModuleData&moduleData=moduleDataO->first;
+				if(moduleData.name.size())
+				{
+					moduleToFile.insert({moduleData.name,p.string()});
+				}
+				if(moduleData.name.size()||!external)
+				{
+					path object=external?path{flagger->moduleNameToFile(moduleData.name,configuration->objectDirectory())}:replaceMove(*configuration,p,path{"o"});
+					size_t icount=moduleData.imports.size();
+					it->second={std::move(moduleData.name),std::move(moduleDataO->second),std::move(object),std::move(moduleData.imports),vector<char>(icount),external};
+					it->second.eraseDuplicateImports();
+				}
+				else
+				{
+					files[external].erase(it);
+					io.reset();
+				}
+			}
+			/*optional<path>preprocessedFile=preprocess(*configuration,p,flagger->getCompilerType()==LLVM);
 			if(preprocessedFile)
 			{
 				ModuleData moduleData=parseModuleData(*configuration,*preprocessedFile);
@@ -108,7 +129,7 @@ public:
 					files[external].erase(it);
 					io.reset();
 				}
-			}
+			}*/
 			else
 			{
 				files[external].erase(it);
