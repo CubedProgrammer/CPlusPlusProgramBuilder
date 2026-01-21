@@ -68,7 +68,7 @@ public:
 				//pathS+=pathSV;
 				path pathPath(pathSV);
 				string pathS=absolute(pathPath).string();
-				string outputfile=headerNameToOutput(pathSV,configuration->objectDirectory());
+				string outputfile=headerNameToOutput(pathSV);
 				compile({pathS,outputfile,""},{},false,true);
 				println("clang found {} {}",pathSV,outputfile);
 				clangHeaderOutputs.push_back("-fmodule-file="+outputfile);
@@ -105,7 +105,7 @@ public:
 		clangHeaderFlagStorage.clear();
 		for(const ImportUnit&unit:views::filter(imports,[](const ImportUnit&u){return u.type!=MODULE;}))
 		{
-			clangHeaderFlagStorage.push_back("-fmodule-file="+headerNameToOutput(unit.name,configuration->objectDirectory()));
+			clangHeaderFlagStorage.push_back("-fmodule-file="+headerNameToOutput(unit.name));
 		}
 		output.append_range(clangHeaderFlagStorage);
 		if(isHeader)
@@ -122,7 +122,7 @@ public:
 		if(!notInterface&&!isHeader)
 		{
 			clangModulePath="-fmodule-output=";
-			clangModulePath+=moduleNameToFile(moduleName,configuration->objectDirectory());
+			clangModulePath+=moduleNameToFile(moduleName);
 			output.push_back(clangModulePath);
 		}
 	}

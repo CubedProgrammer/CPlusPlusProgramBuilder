@@ -58,7 +58,7 @@ public:
 		:moduleToFile(),files(),configuration(),flagger()
 	{}
 	BaseCompilerConfigurer*getCompiler()
-		noexcept
+		const noexcept
 	{
 		return flagger;
 	}
@@ -97,7 +97,7 @@ public:
 				}
 				if(moduleData.name.size()||!external)
 				{
-					path object=external?path{flagger->moduleNameToFile(moduleData.name,configuration->objectDirectory())}:replaceMove(*configuration,p,path{"o"});
+					path object=external?path{flagger->moduleNameToFile(moduleData.name)}:replaceMove(*configuration,p,path{"o"});
 					size_t icount=moduleData.imports.size();
 					it->second={std::move(moduleData.name),std::move(moduleDataO->second),std::move(object),std::move(moduleData.imports),vector<char>(icount),external};
 					it->second.eraseDuplicateImports();
@@ -127,6 +127,10 @@ public:
 			{
 				it=files[1].begin();
 				second=true;
+				if(it==files[1].end())
+				{
+					break;
+				}
 			}
 			auto&[pathString,data]=*it;
 			for(auto[unit,hasBeenResolved]:data.dependResolved())
@@ -142,9 +146,8 @@ public:
 				}
 				else
 				{
-					path p(pathString);
-					println("unit.name {}",unit.name);
-					optional<string>headerPathO=flagger->findHeader(p.parent_path(),unit.name,unit.type==LOCAL_HEADER);
+					println("unit.name {} {}",pathString,unit.name);
+					optional<string>headerPathO=flagger->findHeader(pathString,unit.name,unit.type==LOCAL_HEADER);
 					if(headerPathO)
 					{
 						unit.name=*headerPathO;
@@ -224,7 +227,7 @@ export ForwardGraph makeForwardGraph(const ProjectGraph&pg,bool forceRecompile,b
 	auto queryFunction=bind_front(&ProjectGraph::query,pg);
 	for(const auto&[pathString,fdata]:pg.getProjectFiles())
 	{
-		g.insert(pathString,fdata,forceLevel,queryFunction);
+		g.insert(pathString,fdata,forceLevel,*pg.getCompiler(),queryFunction);
 	}
 	auto[q,visited]=pg.getExternalImports();
 	while(!q.empty())
@@ -236,7 +239,7 @@ export ForwardGraph makeForwardGraph(const ProjectGraph&pg,bool forceRecompile,b
 		{
 			const FileData&fdata=(*dataPairO)->second;
 			const auto&v=fdata.depend;
-			g.insert(fname,fdata,forceLevel,queryFunction);
+			g.insert(fname,fdata,forceLevel,*pg.getCompiler(),queryFunction);
 			for(const ImportUnit&unit:v)
 			{
 				auto[_,succ]=visited.insert(unit.name);

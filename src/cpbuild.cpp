@@ -216,11 +216,15 @@ public:
 				ForwardGraphNode node=std::move(compileQueue.front());
 				compileQueue.pop();
 				const ForwardGraphNodeData&data=graph.at(node);
-				path cmi=replaceMove(options,path{node.name},path{"pcm"});
+				path cmi=compiler->headerNameToOutput(node.name);
+				//path cmi=replaceMove(options,path{node.name},path{"pcm"});
 				auto dataPairO=back.query(node.name);
 				auto requiredTrioO=dataPairO.transform([](const pair<const string,FileData>*m){return dataToTrio(m->second);});
 				auto requiredTrio=requiredTrioO.value_or(tuple<const string&,const path&,span<const ImportUnit>>{EMPTYSTRING,cmi,span<const ImportUnit>{static_cast<const ImportUnit*>(nullptr),0}});
-				//const ModuleCompilation&mc=node.header?headers.m.at({node.name}):node.external?external.files.m.at(path{node.name}):internal.files.m.at(path{node.name});
+				if(node.header)
+				{
+					println("header cpbuild {} {}",node.name,get<1>(requiredTrio).string());
+				}
 				if(!node.external&&!node.header)
 				{
 					linkerArguments.push_back(get<1>(requiredTrio).string());

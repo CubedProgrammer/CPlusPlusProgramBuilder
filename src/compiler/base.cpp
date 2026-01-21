@@ -101,7 +101,7 @@ public:
 	{
 		return".pcm";
 	}
-	string moduleNameToFile(string_view name,string_view outputDirectory)
+	string moduleNameToFile(string_view name)
 		const
 	{
 		string file{name};
@@ -112,7 +112,7 @@ public:
 		if(name.size())
 		{
 			file+=getModuleExtension();
-			file=prependOutputDirectory(file,outputDirectory);
+			file=prependOutputDirectory(file,configuration->objectDirectory());
 		}
 		return file;
 	}
@@ -139,7 +139,7 @@ public:
 		}
 		return opath;
 	}
-	string headerNameToOutput(string_view name,string_view outputDirectory)
+	string headerNameToOutput(string_view name)
 		const
 	{
 		string s;
@@ -155,8 +155,8 @@ public:
 				s.push_back(c);
 			}
 		}
-		s+=".pcm";
-		return prependOutputDirectory(std::move(s),outputDirectory);
+		s+=getModuleExtension();
+		return prependOutputDirectory(std::move(s),configuration->objectDirectory());
 	}
 	vector<path>searchForLikelyCandidates(string_view name)
 	{

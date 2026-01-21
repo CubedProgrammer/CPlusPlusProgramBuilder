@@ -1,4 +1,5 @@
 export module graph.front;
+export import compiler.base;
 export import graph.common;
 using namespace std;
 using filesystem::path;
@@ -33,11 +34,12 @@ export struct ForwardGraph
 {
 	using map_type=unordered_map<ForwardGraphNode,ForwardGraphNodeData>;
 	map_type graph;
-	void insert(string_view pathString,const FileData&fdata,unsigned forceLevel,function<optional<const pair<const string,FileData>*>(string_view)>query)
+	void insert(string_view pathString,const FileData&fdata,unsigned forceLevel,const BaseCompilerConfigurer&compiler,function<optional<const pair<const string,FileData>*>(string_view)>query)
 	{
 		path p(pathString);
 		bool updated=isMoreRecent(p,fdata.object);
-		bool toCompile=(forceLevel>>fdata.external&1)||updated;
+		bool force=forceLevel>>fdata.external&1;
+		bool toCompile=force||updated;
 		auto[it,succ]=graph.insert({{string{pathString},fdata.module.size()==0,false,fdata.external},{{},static_cast<uint16_t>(fdata.depend.size()),toCompile}});
 		if(!succ)
 		{
@@ -54,7 +56,12 @@ export struct ForwardGraph
 				external=dependData.external;
 			}
 			ForwardGraphNode node{iu.name,false,iu.type!=MODULE,external};
-			auto[itN,_]=graph.insert({std::move(node),{{},0,false}});
+			bool recompile=false;
+			if(iu.type!=MODULE)
+			{
+				recompile=force||isMoreRecent(iu.name,compiler.headerNameToOutput(iu.name));
+			}
+			auto[itN,_]=graph.insert({std::move(node),{{},0,recompile}});
 			itN->second.dependent.push_back(it->first);
 		}
 	}
