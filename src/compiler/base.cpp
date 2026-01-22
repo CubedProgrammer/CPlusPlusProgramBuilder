@@ -213,59 +213,69 @@ public:
 	virtual void addSpecificPreprocessArguments(vector<char*>&args)
 		const
 	{}
-	pair<optional<path>,optional<string>>preprocess(const path&file)
+	pair<optional<path>,optional<string>>preprocess(const path&file,bool external)
 	{
 		optional<path>outOpt;
 		optional<string>errOpt;
 		path out=replaceMove(*configuration,file,path{"ii"});
-		string fileString=file.string();
-		string outString=out.string();
-		char preprocessOption[]="-E";
-		char outOption[]="-o";
-		vector<char*>preprocessCommand;
-		create_directories(out.parent_path());
-		preprocessCommand.reserve(configuration->compilerOptions.size()+7);
-		preprocessCommand.push_back(svConstCaster(configuration->compiler()));
-		addSpecificPreprocessArguments(preprocessCommand);
-		preprocessCommand.push_back(preprocessOption);
-		preprocessCommand.append_range(views::transform(configuration->compilerOptions,svConstCaster));
-		preprocessCommand.push_back(svConstCaster(fileString));
-		preprocessCommand.push_back(outOption);
-		preprocessCommand.push_back(svConstCaster(outString));
-		preprocessCommand.push_back(nullptr);
-		auto pid=launch_program(preprocessCommand,PIPE_ERROR);
-		if(pid)
+		bool force=configuration->isForceRecompile()&&(!external||configuration->isForceRecompileEnhanced());
+		bool shouldPreprocess=force||isMoreRecent(file,out);
+		if(shouldPreprocess)
 		{
-			if(pid->second!=0)
+			string fileString=file.string();
+			string outString=out.string();
+			char preprocessOption[]="-E";
+			char outOption[]="-o";
+			vector<char*>preprocessCommand;
+			create_directories(out.parent_path());
+			preprocessCommand.reserve(configuration->compilerOptions.size()+7);
+			preprocessCommand.push_back(svConstCaster(configuration->compiler()));
+			addSpecificPreprocessArguments(preprocessCommand);
+			preprocessCommand.push_back(preprocessOption);
+			preprocessCommand.append_range(views::transform(configuration->compilerOptions,svConstCaster));
+			preprocessCommand.push_back(svConstCaster(fileString));
+			preprocessCommand.push_back(outOption);
+			preprocessCommand.push_back(svConstCaster(outString));
+			preprocessCommand.push_back(nullptr);
+			auto pid=launch_program(preprocessCommand,PIPE_ERROR);
+			if(pid)
 			{
-				println(cerr,"preprocessing {} failed with exit code {}",fileString,pid->second);
-				//preprocessCommand.pop_back();
-				//println("{}",preprocessCommand);
+				if(pid->second!=0)
+				{
+					println(cerr,"preprocessing {} failed with exit code {}",fileString,pid->second);
+					//preprocessCommand.pop_back();
+					//println("{}",preprocessCommand);
+				}
+				else
+				{
+					outOpt=std::move(out);
+				}
+				errOpt=std::move(pid->first);
 			}
 			else
 			{
-				outOpt=std::move(out);
+				println(cerr,"preprocessing {} failed",fileString);
 			}
-			errOpt=std::move(pid->first);
 		}
 		else
 		{
-			println(cerr,"preprocessing {} failed",fileString);
+			outOpt=std::move(out);
+			errOpt=string();
 		}
 		return{std::move(outOpt),std::move(errOpt)};
 	}
-	virtual optional<pair<ModuleData,path>>onPreprocessError(const path&file,const string&error)=0;
-	optional<pair<ModuleData,path>>scanImports(const path&file)
+	virtual optional<pair<ModuleData,path>>onPreprocessError(const path&file,const string&error,bool external)=0;
+	optional<pair<ModuleData,path>>scanImports(const path&file,bool external)
 	{
 		optional<pair<ModuleData,path>>dataO;
-		auto[pathO,errorO]=preprocess(file);
+		auto[pathO,errorO]=preprocess(file,external);
 		if(pathO)
 		{
 			dataO={parseModuleData(*configuration,*pathO),std::move(*pathO)};
 		}
 		else if(errorO)
 		{
-			dataO=onPreprocessError(file,*errorO);
+			dataO=onPreprocessError(file,*errorO,external);
 		}
 		return dataO;
 	}

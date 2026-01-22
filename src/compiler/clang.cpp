@@ -49,7 +49,7 @@ public:
 			args.push_back(svConstCaster(sv));
 		}
 	}
-	virtual optional<pair<ModuleData,path>>onPreprocessError(const path&file,const string&error)
+	virtual optional<pair<ModuleData,path>>onPreprocessError(const path&file,const string&error,bool external)
 	{
 		optional<pair<ModuleData,path>>mdO;
 		vector<ImportUnit>importedHeaders;
@@ -63,21 +63,27 @@ public:
 			{
 				string_view info{error.data()+beginIndex+CLANG_HEADER_ERROR_BEGIN.size(),error.data()+endIndex};
 				size_t akaIndex=info.find("aka");
+				bool external=info[0]!=info[akaIndex-3];
 				string_view pathSV=info.substr(akaIndex+5,info.size()-akaIndex-7);
 				//string pathS=pathSV.front()=='/'?"":"./";
 				//pathS+=pathSV;
 				path pathPath(pathSV);
 				string pathS=absolute(pathPath).string();
 				string outputfile=headerNameToOutput(pathSV);
-				compile({pathS,outputfile,""},{},false,true);
-				println("clang found {} {}",pathSV,outputfile);
+				bool force=configuration->isForceRecompile()&&(!external||configuration->isForceRecompileEnhanced());
+				bool shouldCompile=force||isMoreRecent(pathPath,outputfile);
+				if(shouldCompile)
+				{
+					compile({pathS,outputfile,""},{},false,true);
+				}
+				println("clang found {} {} {}",external,pathSV,outputfile);
 				clangHeaderOutputs.push_back("-fmodule-file="+outputfile);
-				importedHeaders.push_back({string{pathSV},SYS_HEADER});
+				importedHeaders.push_back({string{pathSV},external?SYS_HEADER:LOCAL_HEADER});
 				//importedHeaders.push_back({std::move(pathS),SYS_HEADER});
 			}
 		}
 		manager->wait_remaining_processes();
-		auto[pathO,_]=preprocess(file);
+		auto[pathO,_]=preprocess(file,external);
 		clangHeaderOutputs.clear();
 		if(pathO)
 		{

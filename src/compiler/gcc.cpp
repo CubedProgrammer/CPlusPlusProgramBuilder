@@ -26,7 +26,7 @@ public:
 	{
 		return".gcm";
 	}
-	virtual optional<pair<ModuleData,path>>onPreprocessError(const path&file,const string&error)
+	virtual optional<pair<ModuleData,path>>onPreprocessError(const path&file,const string&error,bool external)
 	{
 		print(cerr,"{}",error);
 		return nullopt;

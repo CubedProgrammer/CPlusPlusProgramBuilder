@@ -87,7 +87,7 @@ public:
 		optional<iterator>io(iterator{&files,it,external});
 		if(success)
 		{
-			optional<pair<ModuleData,path>>moduleDataO=flagger->scanImports(p);
+			optional<pair<ModuleData,path>>moduleDataO=flagger->scanImports(p,external);
 			if(moduleDataO)
 			{
 				ModuleData&moduleData=moduleDataO->first;
