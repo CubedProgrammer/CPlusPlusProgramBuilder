@@ -18,6 +18,10 @@ export enum CompilerType
 {
 	LLVM,GNU
 };
+bool hasSTDFlag(const BuildConfiguration&options)
+{
+	return ranges::find_if(options.compilerOptions,[](string_view sv){return sv.starts_with("-std=");})==options.compilerOptions.end();
+}
 export path replaceMove(const BuildConfiguration&options,path file,const path&extension)
 {
 	if(file.has_extension())
@@ -235,25 +239,24 @@ public:
 			char outOption[]="-o";
 			vector<char*>preprocessCommand;
 			create_directories(out.parent_path());
-			preprocessCommand.reserve(configuration->compilerOptions.size()+7);
+			preprocessCommand.reserve(configuration->compilerOptions.size()+8);
 			preprocessCommand.push_back(svConstCaster(configuration->compiler()));
+			if(hasSTDFlag(*configuration))
+			{
+				preprocessCommand.push_back(svConstCaster(CBP_LANGUAGE_VERSION));
+			}
 			addSpecificPreprocessArguments(preprocessCommand);
 			preprocessCommand.push_back(preprocessOption);
 			preprocessCommand.append_range(views::transform(configuration->compilerOptions,svConstCaster));
 			preprocessCommand.push_back(svConstCaster(fileString));
 			preprocessCommand.push_back(outOption);
 			preprocessCommand.push_back(svConstCaster(outString));
+			println("{}",preprocessCommand);
 			preprocessCommand.push_back(nullptr);
 			auto pid=launch_program(preprocessCommand,PIPE_ERROR);
 			if(pid)
 			{
-				if(pid->second!=0)
-				{
-					println(cerr,"preprocessing {} failed with exit code {}",fileString,pid->second);
-					//preprocessCommand.pop_back();
-					//println("{}",preprocessCommand);
-				}
-				else
+				if(pid->second==0)
 				{
 					outOpt=std::move(out);
 				}
@@ -284,14 +287,18 @@ public:
 		{
 			dataO=onPreprocessError(file,*errorO,external);
 		}
+		if(!dataO)
+		{
+			string s=external?"external":"internal";
+			println(cerr,"Scanning dependencies for {} file {} failed.",s,file.string());
+		}
 		return dataO;
 	}
 	virtual void addCompilerSpecificArguments()=0;
 	void addArguments()
 	{
 		compilerArguments.push_back(configuration->compiler());
-		bool addLanguageVersion=ranges::find_if(configuration->compilerOptions,[](string_view sv){return sv.starts_with("-std=");})==configuration->compilerOptions.end();
-		if(addLanguageVersion)
+		if(hasSTDFlag(*configuration))
 		{
 			compilerArguments.push_back(CBP_LANGUAGE_VERSION);
 		}
