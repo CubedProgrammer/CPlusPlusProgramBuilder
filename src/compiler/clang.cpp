@@ -76,7 +76,7 @@ public:
 				{
 					compile({pathS,outputfile,""},{},false,true);
 				}
-				println("clang found {} {} {}",external,pathSV,outputfile);
+				//println("clang found {} {} {}",external,pathSV,outputfile);
 				clangHeaderOutputs.push_back("-fmodule-file="+outputfile);
 				importedHeaders.push_back({string{pathSV},external?SYS_HEADER:LOCAL_HEADER});
 				//importedHeaders.push_back({std::move(pathS),SYS_HEADER});

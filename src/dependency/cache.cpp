@@ -2,7 +2,7 @@ export module dependency.cache;
 export import graph.back;
 using namespace std;
 using filesystem::path;
-using views::zip;
+using views::filter;
 constexpr char OPENING='[';
 constexpr char CLOSING=']';
 export bool parseDependencies(ProjectGraph&g,istream&in)
@@ -84,6 +84,38 @@ export void dumpDependencies(const ProjectGraph&g,ostream&out)
 		}
 	}
 }
+bool attemptToResolveUsing(ProjectGraph&g,string_view module,unordered_set<string_view>&visited,queue<string_view>&q,span<const path>likely)
+{
+	bool found=false;
+	for(const path&p:likely)
+	{
+		//println("checking {} against {}",module,p.string());
+		auto itO=g.addFile(std::move(p),true);
+		if(itO)
+		{
+			auto&it1=*itO;
+			if(it1->second.module==module)
+			{
+				for(const ImportUnit&unit:filter(it1->second.depend,[](const ImportUnit&u){return u.type==MODULE;}))
+				{
+					auto[_,success]=visited.insert(unit.name);
+					if(success)
+					{
+						q.push(unit.name);
+					}
+				}
+				//println("found {}",p.string());
+				found=true;
+				break;
+			}
+			else
+			{
+				g.erase(it1);
+			}
+		}
+	}
+	return found;
+}
 export void resolveUnresolvedDependencies(ProjectGraph&g)
 {
 	unordered_set<string_view>unresolvedImports;
@@ -93,57 +125,31 @@ export void resolveUnresolvedDependencies(ProjectGraph&g)
 		{
 			if(!resolved)
 			{
-				vector<path>potential=g.getCompiler()->searchForLikelyCandidates(i.name);
-				bool found=false;
-				for(path&p:potential)
-				{
-					auto itO=g.addFile(std::move(p),true);
-					if(itO)
-					{
-						auto&it1=*itO;
-						if(it1->second.module==i.name)
-						{
-							found=true;
-							break;
-						}
-						else
-						{
-							g.erase(it1);
-						}
-					}
-				}
-				if(!found)
+				//vector<path>potential=g.getCompiler()->searchForLikelyCandidates(i.name);
+				unresolvedImports.insert(i.name);
+				/*if(!found)
 				{
 					unresolvedImports.insert(i.name);
-				}
+				}*/
 			}
 		}
 	}
-	auto filesToTry=ranges::to<vector<path>>(g.getCompiler()->getPotentialModuleFiles());
-	for(string_view sv:unresolvedImports)
+	queue<string_view>q=ranges::to<queue<string_view>>(unresolvedImports);
+	while(q.size()>0)
 	{
-		println("unresolved {}",sv);
-		auto scores=views::transform(filesToTry,[sv](const path&m){string n=m.stem().string();return similarity(sv,n);});
-		auto scoresVector=ranges::to<vector<ModulePathSimilarity>>(scores);
-		ranges::sort(zip(scoresVector,filesToTry),ranges::greater());
-		for(path t:filesToTry)
+		string_view sv=q.front();
+		q.pop();
+		//println("unresolved {}",sv);
+		vector<path>likely=g.getCompiler()->searchForLikelyCandidates(sv);
+		//println("likely size {}",likely.size());
+		if(!attemptToResolveUsing(g,sv,unresolvedImports,q,likely))
 		{
-			string ts=t.stem().string();
-			auto sim=similarity(sv,ts);
-			println("{} {} {}",ts,sim.lcs,sim.remaining);
-			auto iteratorOpt=g.addFile(std::move(t),true);
-			if(iteratorOpt)
+			auto filesToTry=g.getCompiler()->sortPotentialModuleFiles(sv);
+			//println("filesToTry size {}",filesToTry.size());
+			bool found=attemptToResolveUsing(g,sv,unresolvedImports,q,filesToTry);
+			if(!found)
 			{
-				auto&it1=*iteratorOpt;
-				if(it1->second.module==sv)
-				{
-					println("found {}",t.string());
-					break;
-				}
-				else
-				{
-					g.erase(it1);
-				}
+				println(cerr,"fatal error: module {} not found",sv);
 			}
 		}
 	}

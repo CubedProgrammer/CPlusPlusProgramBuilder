@@ -122,7 +122,7 @@ public:
 					resolveUnresolvedDependencies(back);
 				}
 			}
-			println("loaded {}",loaded);
+			//println("loaded {}",loaded);
 		}
 		return loaded;
 	}
@@ -135,13 +135,12 @@ public:
 	void cpbuild()
 	{
 		constexpr string EMPTYSTRING="";
-		span<string_view>targets=options.targets;
 		compiler->addArguments();
-		println("{}",targets);
+		//println("{}",targets);
 		bool dependencyHasBeenLoaded=loadedDependencies();
 		if(!dependencyHasBeenLoaded)
 		{
-			for(path t:targets)
+			for(path t:options.targets)
 			{
 				if(is_directory(t))
 				{
@@ -184,8 +183,9 @@ public:
 				}
 			}
 			back.convertDependenciesToPath();
+			resolveUnresolvedDependencies(back);
 		}
-		resolveUnresolvedDependencies(back);
+		back.convertDependenciesToPath();
 		if(options.dependencyCache().size())
 		{
 			cacheDependencies();
@@ -198,16 +198,16 @@ public:
 				println("{}\n{}",p,ranges::to<string>(importstr));
 			}
 		}
-		for(const auto&[p,data]:back)
+		/*for(const auto&[p,data]:back)
 		{
 			println("{} {}",p,views::transform(data.depend,&ImportUnit::name));
-		}
+		}*/
 		graph=makeForwardGraph(back,options.isForceRecompile(),options.isForceRecompileEnhanced());
 		queue<ForwardGraphNode>compileQueue=buildInitialCompileQueue(graph);
-		for(const auto&[node,data]:graph.internal())
+		/*for(const auto&[node,data]:graph.internal())
 		{
 			println("node {}\n{}",node.name,views::transform(data.dependent,&ForwardGraphNode::name));
-		}
+		}*/
 		unordered_map<unsigned,ForwardGraphNode>processToNode;
 		while(!pm.is_empty()||compileQueue.size())
 		{
@@ -221,20 +221,12 @@ public:
 				auto dataPairO=back.query(node.name);
 				auto requiredTrioO=dataPairO.transform([](const pair<const string,FileData>*m){return dataToTrio(m->second);});
 				auto requiredTrio=requiredTrioO.value_or(tuple<const string&,const path&,span<const ImportUnit>>{EMPTYSTRING,cmi,span<const ImportUnit>{static_cast<const ImportUnit*>(nullptr),0}});
-				if(node.header)
-				{
-					println("header cpbuild {} {}",node.name,get<1>(requiredTrio).string());
-				}
 				if(!node.external&&!node.header)
 				{
 					linkerArguments.push_back(get<1>(requiredTrio).string());
 				}
 				if(data.recompile)
 				{
-					if(options.isDisplayCommand())
-					{
-						println("Compiling {}",node.name);
-					}
 					string outputfile=node.external&&!node.header?"/dev/null":get<1>(requiredTrio).string();
 					path emptypath;
 					const path&pp=node.header?emptypath:dataPairO.value()->second.preprocessed;

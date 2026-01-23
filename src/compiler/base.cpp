@@ -5,7 +5,7 @@ using namespace std;
 using namespace literals;
 using filesystem::path;
 using filesystem::recursive_directory_iterator;
-using views::filter;
+using views::filter,views::zip;
 export constexpr string_view CBP_COMPILE_FLAG="-c";
 export constexpr string_view CBP_OUTPUT_FLAG="-o";
 export constexpr string_view CBP_LANGUAGE_FLAG="-x";
@@ -206,6 +206,13 @@ public:
 			}
 		}
 		return candidates;
+	}
+	span<const path>sortPotentialModuleFiles(string_view m)
+	{
+		auto scores=views::transform(potentialModuleFiles,[m](const path&p){string n=p.stem().string();return similarity(m,n);});
+		auto scoresVector=ranges::to<vector<ModulePathSimilarity>>(scores);
+		ranges::sort(zip(scoresVector,potentialModuleFiles),ranges::greater());
+		return potentialModuleFiles;
 	}
 	virtual void resolveHeaders(span<ImportUnit>units,span<char>resolved)
 		const

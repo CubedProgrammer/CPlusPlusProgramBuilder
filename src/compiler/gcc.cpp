@@ -92,7 +92,7 @@ public:
 			cmi=moduleNameToFile(use=mname);
 		}
 		ofstream fout(moduleMapperFlag.substr(CBP_GCC_MAPPER_FLAG.size()+1),ios::app);
-		println("gcc module map {} {}",use,cmi);
+		//println("gcc module map {} {}",use,cmi);
 		println(fout,"{} {}",use,cmi);
 	}
 };
