@@ -2,7 +2,7 @@ import std;
 import cpbuild;
 constexpr unsigned MAJOR=0;
 constexpr unsigned MINOR=3;
-constexpr unsigned PATCH=1;
+constexpr unsigned PATCH=2;
 using namespace std;
 using filesystem::current_path;
 int mainpp(span<string_view>args)

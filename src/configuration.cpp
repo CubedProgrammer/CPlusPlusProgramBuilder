@@ -11,6 +11,7 @@ export constexpr char PARALLEL_OPTION_FLAG='j';
 export constexpr char FILE_OPTION_FLAG='b';
 constexpr char LONG_OPTION_FLAG='-';
 export constexpr string_view CBP_COMPILER_NAME="c++";
+constexpr string_view CURLY_BRACES="{}";
 export struct BuildConfiguration
 {
 	array<string_view,5>svOptions;
@@ -169,7 +170,22 @@ export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 				{
 					if(consumeInto.index()==2)
 					{
-						**get_if<2>(&consumeInto)=arguments.subspan(index,consume);
+						if(sv.size()>0&&sv[0]==CURLY_BRACES[0])
+						{
+							size_t indexCopy=index;
+							size_t start=++indexCopy;
+							for(;indexCopy<arguments.size()&&arguments[indexCopy].size()>0&&arguments[indexCopy][0]!=CURLY_BRACES[1];++indexCopy);
+							consume=indexCopy-start+1;
+							if(indexCopy<arguments.size())
+							{
+								**get_if<2>(&consumeInto)=arguments.subspan(start,indexCopy-start);
+								++consume;
+							}
+						}
+						else
+						{
+							**get_if<2>(&consumeInto)=arguments.subspan(index,consume);
+						}
 					}
 					else
 					{

@@ -134,7 +134,7 @@ public:
 	}
 	void cpbuild()
 	{
-		constexpr string EMPTYSTRING="";
+		const string EMPTYSTRING="";
 		compiler->addArguments();
 		//println("{}",targets);
 		bool dependencyHasBeenLoaded=loadedDependencies();
