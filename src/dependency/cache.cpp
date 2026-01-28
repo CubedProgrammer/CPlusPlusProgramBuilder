@@ -98,10 +98,13 @@ bool attemptToResolveUsing(ProjectGraph&g,string_view module,unordered_set<strin
 			{
 				for(const ImportUnit&unit:filter(it1->second.depend,[](const ImportUnit&u){return u.type==MODULE;}))
 				{
-					auto[_,success]=visited.insert(unit.name);
-					if(success)
+					if(!g.hasModule(unit.name))
 					{
-						q.push(unit.name);
+						auto[_,success]=visited.insert(unit.name);
+						if(success)
+						{
+							q.push(unit.name);
+						}
 					}
 				}
 				//println("found {}",p.string());
@@ -139,7 +142,7 @@ export void resolveUnresolvedDependencies(ProjectGraph&g)
 	{
 		string_view sv=q.front();
 		q.pop();
-		//println("unresolved {}",sv);
+		println("unresolved {}",sv);
 		vector<path>likely=g.getCompiler()->searchForLikelyCandidates(sv);
 		//println("likely size {}",likely.size());
 		if(!attemptToResolveUsing(g,sv,unresolvedImports,q,likely))

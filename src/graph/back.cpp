@@ -117,7 +117,7 @@ public:
 		}
 		return io;
 	}
-	void convertDependenciesToPath()
+	void convertDependenciesToPath(bool toClear=false)
 	{
 		auto it=files[0].begin();
 		bool second=false;
@@ -157,7 +157,10 @@ public:
 			}
 			erase_if(data.depend,[](const ImportUnit&unit){return unit.name.size()==0;});
 		}
-		moduleToFile.clear();
+		if(toClear)
+		{
+			moduleToFile.clear();
+		}
 	}
 	void buildModuleMap()
 	{
@@ -177,6 +180,11 @@ public:
 		bool std=moduleToFile.find("std")!=moduleToFile.end();
 		bool stdCompat=moduleToFile.find("std.compat")!=moduleToFile.end();
 		return((unsigned)stdCompat<<1)|std;
+	}
+	constexpr bool hasModule(string_view mname)
+		const noexcept
+	{
+		return moduleToFile.contains(string{mname});
 	}
 	constexpr optional<const pair<const string,FileData>*>query(string_view p)
 		const noexcept

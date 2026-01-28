@@ -185,7 +185,7 @@ public:
 			back.convertDependenciesToPath();
 			resolveUnresolvedDependencies(back);
 		}
-		back.convertDependenciesToPath();
+		back.convertDependenciesToPath(true);
 		if(options.dependencyCache().size())
 		{
 			cacheDependencies();
