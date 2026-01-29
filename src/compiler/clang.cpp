@@ -39,17 +39,18 @@ public:
 			}
 		}
 	}
-	virtual void addSpecificPreprocessArguments(vector<char*>&args)
+	virtual void addSpecificPreprocessArguments(vector<string_view>&args)
 		const
 	{
-		args.push_back(svConstCaster(CBP_STDLIB_FLAG));
+		args.push_back(CBP_STDLIB_FLAG);
 		for(const string&s:clangHeaderOutputs)
 		{
 			string_view sv=s;
-			args.push_back(svConstCaster(sv));
+			args.push_back(sv);
 		}
 	}
-	virtual optional<pair<ModuleData,path>>onPreprocessError(const path&file,const string&error,bool external)
+	//virtual optional<pair<ModuleData,path>>onPreprocessError(const path&file,const string&error,bool external)
+	virtual Async<optional<pair<ModuleData,path>>>onPreprocessError(const path&file,const string&error,bool external)
 	{
 		optional<pair<ModuleData,path>>mdO;
 		vector<ImportUnit>importedHeaders;
@@ -83,7 +84,7 @@ public:
 			}
 		}
 		manager->wait_remaining_processes();
-		auto[pathO,_]=preprocess(file,external);
+		auto[pathO,_]=co_await preprocess(file,external);
 		clangHeaderOutputs.clear();
 		if(pathO)
 		{
@@ -91,7 +92,7 @@ public:
 			erase_if(mdO->first.imports,[](const ImportUnit&unit){return unit.type!=MODULE;});
 			mdO->first.imports.append_range(as_rvalue(importedHeaders));
 		}
-		return mdO;
+		co_return mdO;
 	}
 	virtual void addCompilerSpecificArguments()
 	{

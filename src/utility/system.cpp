@@ -1,11 +1,13 @@
 module;
 #include<cerrno>
 #include<fcntl.h>
+#include<sys/select.h>
 #include<sys/wait.h>
 #include<unistd.h>
 export module utility.system;
 export import std;
 using namespace std;
+using chrono::duration,chrono::microseconds;
 using filesystem::path;
 export constexpr unsigned PIPE_NOTHING=0;
 export constexpr unsigned PIPE_OUTPUT=1;
@@ -21,6 +23,97 @@ export struct ModulePathSimilarity
 		return first==0?other.remaining<=>remaining:first;
 	}
 };
+export class PipeHandle
+{
+	optional<int>fdO;
+public:
+	PipeHandle(int fd)
+		noexcept
+		:fdO(fd)
+	{}
+	PipeHandle()
+		noexcept
+		:fdO(nullopt)
+	{}
+	PipeHandle(PipeHandle&&other)
+		noexcept
+		:fdO(std::move(other.fdO))
+	{
+		other.fdO.reset();
+	}
+	PipeHandle&operator=(PipeHandle&&other)
+		noexcept
+	{
+		fdO=std::move(other.fdO);
+		other.fdO.reset();
+		return*this;
+	}
+	optional<size_t>readInto(span<char>buffer)
+	{
+		if(fdO)
+		{
+			auto v=read(*fdO,static_cast<void*>(buffer.data()),buffer.size());
+			return v<0?optional<size_t>{}:optional<size_t>{v};
+		}
+		else
+		{
+			return{nullopt};
+		}
+	}
+	optional<int>&getRaw()
+	{
+		return fdO;
+	}
+	~PipeHandle()
+	{
+		if(fdO)
+		{
+			close(*fdO);
+		}
+	}
+};
+export template<typename Rep,typename Period>
+optional<vector<size_t>>selectPipeHandles(span<PipeHandle*>pipeHandles,duration<Rep,Period>d)
+{
+	optional<vector<size_t>>ready;
+	auto casted=duration_cast<microseconds>(d);
+	struct timeval tv;
+	tv.tv_sec=casted.count()/1000000;
+	tv.tv_usec=casted.count()%1000000;
+	fd_set fds;
+	fd_set*fdsp=&fds;
+	FD_ZERO(fdsp);
+	int maxi=0;
+	for(PipeHandle*h:pipeHandles)
+	{
+		optional<int>&fdOpt=h->getRaw();
+		if(fdOpt)
+		{
+			int fd=*fdOpt;
+			maxi=max(fd,maxi);
+			FD_SET(fd,fdsp);
+		}
+	}
+	int r=select(maxi+1,fdsp,nullptr,nullptr,&tv);
+	if(r>=0)
+	{
+		ready.emplace();
+		ready->reserve(r);
+		for(size_t i=0;i<pipeHandles.size();++i)
+		{
+			optional<int>&fdOpt=pipeHandles[i]->getRaw();
+			if(fdOpt)
+			{
+				int fd=*fdOpt;
+				if(FD_ISSET(fd,fdsp))
+				{
+					ready->push_back(i);
+				}
+			}
+		}
+	}
+	return ready;
+}
 size_t longestCS(string_view x,string_view y)
 {
 	using ranges::fill,views::drop;
@@ -56,33 +149,28 @@ export char*svConstCaster(string_view sv)
 {
 	return const_cast<char*>(sv.data());
 }
-export optional<pair<string,int>>launch_program(span<char*>arguments,unsigned pipeTarget=PIPE_NOTHING)
+export optional<pair<int,PipeHandle>>launch_program(span<char*>arguments,unsigned pipeTarget)
 {
+	optional<pair<int,PipeHandle>>oResult;
 	array<int,2>fds;
-	optional<pair<string,int>>oResult;
-	if(pipeTarget==PIPE_NOTHING||pipe(fds.data())==0)
+	array<int,2>errorfds;
+	if(pipe(errorfds.data())&&(pipeTarget==PIPE_NOTHING||pipe(fds.data())==0))
 	{
 		int pid=fork();
 		if(pid>0)
 		{
-			int status;
 			long cnt;
-			oResult=pair<string,int>({},0);
-			close(fds[1]);
-			if(pipeTarget!=PIPE_NOTHING)
+			char c;
+			close(errorfds[1]);
+			cnt=read(errorfds[0],&c,1);
+			if(cnt>0)
 			{
-				array<char,8192>buffer;
-				while((cnt=read(fds[0],buffer.data(),buffer.size()))>0)
+				oResult.emplace(pid,PipeHandle{});
+				if(pipeTarget!=PIPE_NOTHING)
 				{
-					oResult->first.append_range(span(buffer.data(),buffer.data()+cnt));
+					close(fds[1]);
+					oResult->second=PipeHandle(fds[0]);
 				}
-				waitpid(pid,&status,0);
-				close(fds[0]);
-				oResult->second=WEXITSTATUS(status);
-			}
-			else
-			{
-				oResult->second=pid;
 			}
 		}
 		else if(pid<0)
@@ -91,6 +179,8 @@ export optional<pair<string,int>>launch_program(span<char*>arguments,unsigned pi
 		}
 		else
 		{
+			close(errorfds[0]);
+			fcntl(errorfds[1],F_SETFD,FD_CLOEXEC);
 			if(pipeTarget!=PIPE_NOTHING)
 			{
 				if(pipeTarget==PIPE_OUTPUT)
@@ -106,6 +196,9 @@ export optional<pair<string,int>>launch_program(span<char*>arguments,unsigned pi
 			}
 			if(execvp(arguments.front(),arguments.data()))
 			{
+				char c=31;
+				write(errorfds[1],&c,1);
+				close(errorfds[1]);
 				exit(1);
 			}
 		}

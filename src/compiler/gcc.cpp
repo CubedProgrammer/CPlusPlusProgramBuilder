@@ -26,10 +26,10 @@ public:
 	{
 		return".gcm";
 	}
-	virtual optional<pair<ModuleData,path>>onPreprocessError(const path&file,const string&error,bool external)
+	virtual Async<optional<pair<ModuleData,path>>>onPreprocessError(const path&file,const string&error,bool external)
 	{
 		print(cerr,"{}",error);
-		return nullopt;
+		co_return nullopt;
 	}
 	virtual void addCompilerSpecificArguments()
 	{

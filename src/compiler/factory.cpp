@@ -15,7 +15,7 @@ CompilerType getCompilerType(const BuildConfiguration&configuration)
 	auto data=launch_program(args,PIPE_OUTPUT);
 	if(data)
 	{
-		if(data->second==0)
+		/*if(data->second==0)
 		{
 			string&s=data->first;
 			if(!s.starts_with("clang"))
@@ -26,7 +26,7 @@ CompilerType getCompilerType(const BuildConfiguration&configuration)
 		else
 		{
 			println(cerr,"Executing {} failed with exit code {}.",configuration.compiler(),data->second);
-		}
+		}*/
 	}
 	return type;
 }
@@ -47,9 +47,9 @@ export unique_ptr<BaseCompilerConfigurer>getCompiler(const BuildConfiguration&co
 	args.push_back(svConstCaster(CBP_OUTPUT_FLAG));
 	args.push_back(svConstCaster(CBP_NULL_DEVICE));
 	args.push_back(nullptr);
-	optional<pair<string,int>>dataO=launch_program(args,PIPE_ERROR);
+	//optional<pair<string,int>>dataO=launch_program(args,PIPE_ERROR);
 	vector<string>directories;
-	if(dataO&&dataO->second==0)
+	/*if(dataO&&dataO->second==0)
 	{
 		bool insert=false;
 		for(auto sr:views::split(dataO->first,"\n"sv))
@@ -72,6 +72,6 @@ export unique_ptr<BaseCompilerConfigurer>getCompiler(const BuildConfiguration&co
 	else
 	{
 		println(cerr,"Executing {} with arguments {} failed with exit code {}.",configuration.compiler(),views::take(args,args.size()-1),dataO->second);
-	}
+	}*/
 	return ct==GNU?unique_ptr<BaseCompilerConfigurer>(make_unique<GCCConfigurer>(std::move(directories),&configuration,ppm)):unique_ptr<BaseCompilerConfigurer>(make_unique<ClangConfigurer>(std::move(directories),&configuration,ppm));
 }

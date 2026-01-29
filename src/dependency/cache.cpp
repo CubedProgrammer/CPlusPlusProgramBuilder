@@ -84,13 +84,13 @@ export void dumpDependencies(const ProjectGraph&g,ostream&out)
 		}
 	}
 }
-bool attemptToResolveUsing(ProjectGraph&g,string_view module,unordered_set<string_view>&visited,queue<string_view>&q,span<const path>likely)
+Async<bool>attemptToResolveUsing(ProjectGraph&g,string_view module,unordered_set<string_view>&visited,queue<string_view>&q,span<const path>likely)
 {
 	bool found=false;
 	for(const path&p:likely)
 	{
 		//println("checking {} against {}",module,p.string());
-		auto itO=g.addFile(std::move(p),true);
+		auto itO=co_await g.addFile(std::move(p),true);
 		if(itO)
 		{
 			auto&it1=*itO;
@@ -117,9 +117,9 @@ bool attemptToResolveUsing(ProjectGraph&g,string_view module,unordered_set<strin
 			}
 		}
 	}
-	return found;
+	co_return found;
 }
-export void resolveUnresolvedDependencies(ProjectGraph&g)
+export Async<>resolveUnresolvedDependencies(ProjectGraph&g)
 {
 	unordered_set<string_view>unresolvedImports;
 	for(const auto&[filepath,filedata]:g)
@@ -145,11 +145,11 @@ export void resolveUnresolvedDependencies(ProjectGraph&g)
 		println("unresolved {}",sv);
 		vector<path>likely=g.getCompiler()->searchForLikelyCandidates(sv);
 		//println("likely size {}",likely.size());
-		if(!attemptToResolveUsing(g,sv,unresolvedImports,q,likely))
+		if(!co_await attemptToResolveUsing(g,sv,unresolvedImports,q,likely))
 		{
 			auto filesToTry=g.getCompiler()->sortPotentialModuleFiles(sv);
 			//println("filesToTry size {}",filesToTry.size());
-			bool found=attemptToResolveUsing(g,sv,unresolvedImports,q,filesToTry);
+			bool found=co_await attemptToResolveUsing(g,sv,unresolvedImports,q,filesToTry);
 			if(!found)
 			{
 				println(cerr,"fatal error: module {} not found",sv);

@@ -1,21 +1,36 @@
 export module utility.process;
+export import utility.async;
 export import utility.system;
 using namespace std;
 export class ParallelProcessManager
 {
 	uint8_t maximum;
 	bool needToWait;
-	unordered_set<unsigned>processes;
+	unordered_set<int>processes;
+	unordered_map<int,coroutine_handle<>>coroutines;
 public:
 	ParallelProcessManager(uint8_t m)
 		noexcept
-		:maximum(m),needToWait(false),processes()
+		:maximum(m),needToWait(false),processes(),coroutines()
 	{}
 	ParallelProcessManager()
 		noexcept
 		:ParallelProcessManager(1)
 	{}
-	optional<unsigned>run(span<string_view>args,bool printCommand)
+	size_t eraseProcess(int pid)
+	{
+		auto it=coroutines.find(pid);
+		if(it!=coroutines.end())
+		{
+			if(it->second)
+			{
+				it->second.resume();
+			}
+			coroutines.erase(it);
+		}
+		return processes.erase(pid);
+	}
+	optional<pair<int,PipeHandle>>run(span<string_view>args,bool printCommand,unsigned pipeTarget=PIPE_NOTHING)
 	{
 		if(needToWait)
 		{
@@ -23,13 +38,13 @@ public:
 			size_t removed=0;
 			while(status)
 			{
-				removed+=processes.erase((unsigned)status->first);
+				removed+=eraseProcess(status->first);
 				status=check_finished_process();
 			}
 			while(removed==0)
 			{
 				status=wait();
-				removed+=status&&processes.erase((unsigned)status->first);
+				removed+=status&&eraseProcess(status->first);
 			}
 			needToWait=false;
 		}
@@ -54,24 +69,34 @@ public:
 		trueArgs.reserve(args.size()+1);
 		trueArgs.append_range(views::transform(args,svConstCaster));
 		trueArgs.push_back(nullptr);
-		auto oid=launch_program(trueArgs);
+		auto oid=launch_program(trueArgs,pipeTarget);
 		if(oid)
 		{
-			processes.insert((unsigned)oid->second);
+			processes.insert(oid->first);
 			needToWait=(uint8_t)processes.size()==maximum;
 		}
-		return oid.transform([](const pair<string,int>&m){return(unsigned)m.second;});
+		return oid;
 	}
-	optional<unsigned>wait_any_process()
+	ProcessAwaitable runAsync(span<string_view>args,bool printCommand,unsigned pipeTarget=PIPE_NOTHING)
 	{
-		optional<unsigned>opid;
+		auto pidO=run(args,printCommand,pipeTarget);
+		auto it=coroutines.end();
+		if(pidO)
+		{
+			it=coroutines.insert({pidO->first,nullptr}).first;
+		}
+		return{pidO.transform([](const pair<int,PipeHandle>&x){return x.first;}),it,pidO.transform([](pair<int,PipeHandle>&x){return std::move(x.second);}).value_or(PipeHandle{})};
+	}
+	optional<int>wait_any_process()
+	{
+		optional<int>opid;
 		bool keepWaiting=true;
 		auto processAndResult=wait();
 		while(keepWaiting&&processAndResult)
 		{
-			if(processes.erase((unsigned)processAndResult->first))
+			if(eraseProcess(processAndResult->first))
 			{
-				opid=(unsigned)processAndResult->first;
+				opid=processAndResult->first;
 				needToWait=keepWaiting=false;
 			}
 			else
@@ -81,14 +106,14 @@ public:
 		}
 		return opid;
 	}
-	void wait_all_processes(span<unsigned>idArray)
+	void wait_all_processes(span<const int>idArray)
 		noexcept
 	{
-		for(unsigned id:idArray)
+		for(int id:idArray)
 		{
-			if(processes.erase(id))
+			if(eraseProcess(id))
 			{
-				wait((int)id);
+				wait(id);
 				needToWait=false;
 			}
 		}
@@ -101,7 +126,7 @@ public:
 			auto status=wait();
 			if(status)
 			{
-				processes.erase((unsigned)status->first);
+				eraseProcess(status->first);
 			}
 		}
 		needToWait=false;

@@ -221,10 +221,10 @@ public:
 	virtual void resolveHeaders(span<ImportUnit>units,span<char>resolved)
 		const
 	{}
-	virtual void addSpecificPreprocessArguments(vector<char*>&args)
+	virtual void addSpecificPreprocessArguments(vector<string_view>&args)
 		const
 	{}
-	pair<optional<path>,optional<string>>preprocess(const path&file,bool external)
+	Async<pair<optional<path>,optional<string>>>preprocess(const path&file,bool external)
 	{
 		optional<path>outOpt;
 		optional<string>errOpt;
@@ -237,30 +237,31 @@ public:
 			string outString=out.string();
 			char preprocessOption[]="-E";
 			char outOption[]="-o";
-			vector<char*>preprocessCommand;
+			vector<string_view>preprocessCommand;
 			create_directories(out.parent_path());
 			preprocessCommand.reserve(configuration->compilerOptions.size()+8);
-			preprocessCommand.push_back(svConstCaster(configuration->compiler()));
+			preprocessCommand.push_back(configuration->compiler());
 			if(hasSTDFlag(*configuration))
 			{
-				preprocessCommand.push_back(svConstCaster(CBP_LANGUAGE_VERSION));
+				preprocessCommand.push_back(CBP_LANGUAGE_VERSION);
 			}
 			addSpecificPreprocessArguments(preprocessCommand);
 			preprocessCommand.push_back(preprocessOption);
-			preprocessCommand.append_range(views::transform(configuration->compilerOptions,svConstCaster));
-			preprocessCommand.push_back(svConstCaster(fileString));
+			preprocessCommand.append_range(configuration->compilerOptions);
+			preprocessCommand.push_back(fileString);
 			preprocessCommand.push_back(outOption);
-			preprocessCommand.push_back(svConstCaster(outString));
-			println("{}",preprocessCommand);
-			preprocessCommand.push_back(nullptr);
-			auto pid=launch_program(preprocessCommand,PIPE_ERROR);
+			preprocessCommand.push_back(outString);
+			// pipe will clog if there is too much output
+			// do not await on the process, instead asynchronously read from the pipe
+			// only await on the process after the pipe is finished
+			// which might be unnecessary, as the process is already finished
+			// implement the asynchronous IO loop, or you are gay
+			auto [pid,handle]=co_await manager->runAsync(preprocessCommand,configuration->isDisplayCommand(),PIPE_ERROR);
+			//auto pid=launch_program(preprocessCommand,PIPE_ERROR);
 			if(pid)
 			{
-				if(pid->second==0)
-				{
-					outOpt=std::move(out);
-				}
-				errOpt=std::move(pid->first);
+				outOpt=std::move(out);
+				//errOpt=std::move(pid->first);
 			}
 			else
 			{
@@ -272,27 +273,27 @@ public:
 			outOpt=std::move(out);
 			errOpt=string();
 		}
-		return{std::move(outOpt),std::move(errOpt)};
+		co_return{std::move(outOpt),std::move(errOpt)};
 	}
-	virtual optional<pair<ModuleData,path>>onPreprocessError(const path&file,const string&error,bool external)=0;
-	optional<pair<ModuleData,path>>scanImports(const path&file,bool external)
+	virtual Async<optional<pair<ModuleData,path>>>onPreprocessError(const path&file,const string&error,bool external)=0;
+	Async<optional<pair<ModuleData,path>>>scanImports(const path&file,bool external)
 	{
 		optional<pair<ModuleData,path>>dataO;
-		auto[pathO,errorO]=preprocess(file,external);
+		auto[pathO,errorO]=co_await preprocess(file,external);
 		if(pathO)
 		{
 			dataO={parseModuleData(*configuration,*pathO),std::move(*pathO)};
 		}
 		else if(errorO)
 		{
-			dataO=onPreprocessError(file,*errorO,external);
+			dataO=co_await onPreprocessError(file,*errorO,external);
 		}
 		if(!dataO)
 		{
 			string s=external?"external":"internal";
 			println(cerr,"Scanning dependencies for {} file {} failed.",s,file.string());
 		}
-		return dataO;
+		co_return dataO;
 	}
 	virtual void addCompilerSpecificArguments()=0;
 	void addArguments()
@@ -320,10 +321,10 @@ public:
 		output.push_back(outputname);
 		return output;
 	}
-	optional<unsigned>compile(array<string_view,3>names,span<const ImportUnit>imports,bool notInterface,bool isHeader)
+	optional<int>compile(array<string_view,3>names,span<const ImportUnit>imports,bool notInterface,bool isHeader)
 	{
 		auto command=getCompileCommand(names,imports,notInterface,isHeader);
-		return manager->run(command,configuration->isDisplayCommand());
+		return manager->run(command,configuration->isDisplayCommand()).transform([](const pair<int,PipeHandle>&res){return res.first;});
 	}
 	vector<string_view>getLinkCommand(string_view artifact,span<const string>files)
 		const

@@ -81,13 +81,13 @@ public:
 			it->second.eraseDuplicateImports();
 		}
 	}
-	optional<iterator>addFile(path p,bool external)
+	Async<optional<iterator>>addFile(path p,bool external)
 	{
 		auto[it,success]=files[external].insert({p.string(),{}});
 		optional<iterator>io(iterator{&files,it,external});
 		if(success)
 		{
-			optional<pair<ModuleData,path>>moduleDataO=flagger->scanImports(p,external);
+			optional<pair<ModuleData,path>>moduleDataO=co_await flagger->scanImports(p,external);
 			if(moduleDataO)
 			{
 				ModuleData&moduleData=moduleDataO->first;
@@ -115,7 +115,7 @@ public:
 				io.reset();
 			}
 		}
-		return io;
+		co_return io;
 	}
 	void convertDependenciesToPath(bool toClear=false)
 	{
