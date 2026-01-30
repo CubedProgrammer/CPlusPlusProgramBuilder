@@ -1,8 +1,7 @@
-import std;
 import cpbuild;
 constexpr unsigned MAJOR=0;
 constexpr unsigned MINOR=3;
-constexpr unsigned PATCH=2;
+constexpr unsigned PATCH=3;
 using namespace std;
 using filesystem::current_path;
 int mainpp(span<string_view>args)

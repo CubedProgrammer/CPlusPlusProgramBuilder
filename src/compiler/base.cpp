@@ -231,6 +231,7 @@ public:
 		path out=replaceMove(*configuration,file,path{"ii"});
 		bool force=configuration->isForceRecompile()&&(!external||configuration->isForceRecompileEnhanced());
 		bool shouldPreprocess=force||isMoreRecent(file,out);
+		println(__FUNCTION__);
 		if(shouldPreprocess)
 		{
 			string fileString=file.string();
@@ -251,22 +252,19 @@ public:
 			preprocessCommand.push_back(fileString);
 			preprocessCommand.push_back(outOption);
 			preprocessCommand.push_back(outString);
-			// pipe will clog if there is too much output
-			// do not await on the process, instead asynchronously read from the pipe
-			// only await on the process after the pipe is finished
-			// which might be unnecessary, as the process is already finished
-			// implement the asynchronous IO loop, or you are gay
-			auto [pid,handle]=co_await manager->runAsync(preprocessCommand,configuration->isDisplayCommand(),PIPE_ERROR);
+			//auto[pid,handle]=co_await manager->runAsync(preprocessCommand,configuration->isDisplayCommand(),PIPE_ERROR);
 			//auto pid=launch_program(preprocessCommand,PIPE_ERROR);
-			if(pid)
+			auto processHandle=manager->runAsync(preprocessCommand,configuration->isDisplayCommand(),PIPE_ERROR);
+			if(processHandle.pidO)
 			{
 				outOpt=std::move(out);
-				//errOpt=std::move(pid->first);
+				errOpt.emplace(co_await readAllAsync(processHandle.handle));
 			}
 			else
 			{
 				println(cerr,"preprocessing {} failed",fileString);
 			}
+			co_await processHandle;
 		}
 		else
 		{
@@ -279,6 +277,7 @@ public:
 	Async<optional<pair<ModuleData,path>>>scanImports(const path&file,bool external)
 	{
 		optional<pair<ModuleData,path>>dataO;
+		println(__FUNCTION__);
 		auto[pathO,errorO]=co_await preprocess(file,external);
 		if(pathO)
 		{

@@ -9,6 +9,7 @@ export import std;
 using namespace std;
 using chrono::duration,chrono::microseconds;
 using filesystem::path;
+using views::take;
 export constexpr unsigned PIPE_NOTHING=0;
 export constexpr unsigned PIPE_OUTPUT=1;
 export constexpr unsigned PIPE_ERROR=2;
@@ -63,6 +64,17 @@ public:
 	optional<int>&getRaw()
 	{
 		return fdO;
+	}
+	string readAll()
+	{
+		string txt;
+		array<char,8192>buf;
+		txt.reserve(8192);
+		for(optional<size_t>cntO=readInto(buf);cntO&&*cntO>0;cntO=readInto(buf))
+		{
+			txt.append_range(take(buf,*cntO));
+		}
+		return txt;
 	}
 	~PipeHandle()
 	{
@@ -154,7 +166,7 @@ export optional<pair<int,PipeHandle>>launch_program(span<char*>arguments,unsigne
 	optional<pair<int,PipeHandle>>oResult;
 	array<int,2>fds;
 	array<int,2>errorfds;
-	if(pipe(errorfds.data())&&(pipeTarget==PIPE_NOTHING||pipe(fds.data())==0))
+	if(pipe(errorfds.data())==0&&(pipeTarget==PIPE_NOTHING||pipe(fds.data())==0))
 	{
 		int pid=fork();
 		if(pid>0)
@@ -163,7 +175,7 @@ export optional<pair<int,PipeHandle>>launch_program(span<char*>arguments,unsigne
 			char c;
 			close(errorfds[1]);
 			cnt=read(errorfds[0],&c,1);
-			if(cnt>0)
+			if(cnt==0)
 			{
 				oResult.emplace(pid,PipeHandle{});
 				if(pipeTarget!=PIPE_NOTHING)

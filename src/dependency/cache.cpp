@@ -5,7 +5,7 @@ using filesystem::path;
 using views::filter;
 constexpr char OPENING='[';
 constexpr char CLOSING=']';
-export bool parseDependencies(ProjectGraph&g,istream&in)
+export Async<bool>parseDependencies(ProjectGraph&g,istream&in)
 {
 	string ln;
 	string current;
@@ -15,6 +15,7 @@ export bool parseDependencies(ProjectGraph&g,istream&in)
 	size_t index=0;
 	bool inside=false;
 	bool atLeastOneUpdated=false;
+	println(__FUNCTION__);
 	while(!getline(in,ln).eof())
 	{
 		if(ln.front()==OPENING)
@@ -31,7 +32,7 @@ export bool parseDependencies(ProjectGraph&g,istream&in)
 			if(updated)
 			{
 				atLeastOneUpdated=true;
-				g.addFile(std::move(source),external);
+				co_await g.addFile(std::move(source),external);
 			}
 			else
 			{
@@ -66,7 +67,7 @@ export bool parseDependencies(ProjectGraph&g,istream&in)
 			current=std::move(ln);
 		}
 	}
-	return atLeastOneUpdated;
+	co_return atLeastOneUpdated;
 }
 export void dumpDependencies(const ProjectGraph&g,ostream&out)
 {
@@ -87,6 +88,7 @@ export void dumpDependencies(const ProjectGraph&g,ostream&out)
 Async<bool>attemptToResolveUsing(ProjectGraph&g,string_view module,unordered_set<string_view>&visited,queue<string_view>&q,span<const path>likely)
 {
 	bool found=false;
+	println(__FUNCTION__);
 	for(const path&p:likely)
 	{
 		//println("checking {} against {}",module,p.string());
@@ -122,6 +124,7 @@ Async<bool>attemptToResolveUsing(ProjectGraph&g,string_view module,unordered_set
 export Async<>resolveUnresolvedDependencies(ProjectGraph&g)
 {
 	unordered_set<string_view>unresolvedImports;
+	println(__FUNCTION__);
 	for(const auto&[filepath,filedata]:g)
 	{
 		for(const auto&[i,resolved]:filedata.dependResolved())

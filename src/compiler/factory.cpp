@@ -15,18 +15,17 @@ CompilerType getCompilerType(const BuildConfiguration&configuration)
 	auto data=launch_program(args,PIPE_OUTPUT);
 	if(data)
 	{
-		/*if(data->second==0)
+		array<char,5>buf;
+		auto cntO=data->second.readInto(buf);
+		if(cntO)
 		{
-			string&s=data->first;
-			if(!s.starts_with("clang"))
+			string_view sv(buf.data(),*cntO);
+			if("clang"!=sv)
 			{
 				type=GNU;
 			}
 		}
-		else
-		{
-			println(cerr,"Executing {} failed with exit code {}.",configuration.compiler(),data->second);
-		}*/
+		wait(data->first);
 	}
 	return type;
 }
@@ -47,12 +46,13 @@ export unique_ptr<BaseCompilerConfigurer>getCompiler(const BuildConfiguration&co
 	args.push_back(svConstCaster(CBP_OUTPUT_FLAG));
 	args.push_back(svConstCaster(CBP_NULL_DEVICE));
 	args.push_back(nullptr);
-	//optional<pair<string,int>>dataO=launch_program(args,PIPE_ERROR);
+	optional<pair<int,PipeHandle>>dataO=launch_program(args,PIPE_ERROR);
 	vector<string>directories;
-	/*if(dataO&&dataO->second==0)
+	if(dataO)
 	{
+		string out=dataO->second.readAll();
 		bool insert=false;
-		for(auto sr:views::split(dataO->first,"\n"sv))
+		for(auto sr:views::split(out,"\n"sv))
 		{
 			string_view sv{sr};
 			if(sv=="End of search list.")
@@ -68,10 +68,12 @@ export unique_ptr<BaseCompilerConfigurer>getCompiler(const BuildConfiguration&co
 				insert=true;
 			}
 		}
+		println("searched include");
+		wait(dataO->first);
 	}
 	else
 	{
-		println(cerr,"Executing {} with arguments {} failed with exit code {}.",configuration.compiler(),views::take(args,args.size()-1),dataO->second);
-	}*/
+		println(cerr,"Executing {} with arguments {} failed.",configuration.compiler(),views::take(args,args.size()-1));
+	}
 	return ct==GNU?unique_ptr<BaseCompilerConfigurer>(make_unique<GCCConfigurer>(std::move(directories),&configuration,ppm)):unique_ptr<BaseCompilerConfigurer>(make_unique<ClangConfigurer>(std::move(directories),&configuration,ppm));
 }

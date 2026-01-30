@@ -85,6 +85,7 @@ public:
 	{
 		auto[it,success]=files[external].insert({p.string(),{}});
 		optional<iterator>io(iterator{&files,it,external});
+		println(__FUNCTION__);
 		if(success)
 		{
 			optional<pair<ModuleData,path>>moduleDataO=co_await flagger->scanImports(p,external);
@@ -121,6 +122,7 @@ public:
 	{
 		auto it=files[0].begin();
 		bool second=false;
+		//println("converting dependencies {}",moduleToFile);
 		for(;!second||it!=files[1].end();++it)
 		{
 			if(it==files[0].end())

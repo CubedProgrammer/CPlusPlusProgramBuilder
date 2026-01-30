@@ -1,7 +1,7 @@
 export module utility.async;
 export import utility.system;
 using namespace std;
-using views::zip;
+using views::take,views::zip;
 export template<typename T>
 class Async;
 class PromiseBase
@@ -53,19 +53,32 @@ export class AsyncBase
 protected:
 	coroutine_handle<>outer;
 public:
-	AsyncBase()=default;
+	AsyncBase()
+		noexcept
+		:outer(nullptr)
+	{
+		//println("{} first outer address {}",(void*)this,outer.address());
+	}
 	void resume_outer()
 	{
+		//println("{} resuming outer address {}",(void*)this,outer.address());
+		//println("resuming outer address {}",outer.address());
 		if(outer)
 		{
+			//println("resuming outer address {}",outer.address());
 			outer.resume();
 			outer=nullptr;
 		}
 	}
 	bool await_suspend(coroutine_handle<>hd)
 	{
+		//println("awaiting suspend");
 		outer=hd;
 		return true;
+	}
+	~AsyncBase()
+	{
+		//println("{}",(void*)this);
 	}
 };
 export template<typename T=void>
@@ -82,9 +95,11 @@ public:
 		p->setTask(*this);
 	}
 	Async()=default;
+	Async(const Async<T>&)=delete;
 	bool await_ready()
 		const noexcept
 	{
+		//println("{} awaiting ready",rv.has_value());
 		return rv.has_value();
 	}
 	T await_resume()
@@ -96,19 +111,25 @@ export template<>
 class Async<void>:public AsyncBase
 {
 	friend PromiseType<void>;
+	bool ready;
 public:
 	using promise_type = PromiseType<void>;
 	Async(promise_type*p)
 		noexcept
-		:AsyncBase()
+		:AsyncBase(),ready(false)
 	{
 		p->setTask(*this);
 	}
 	Async()=default;
+	void returned()
+		noexcept
+	{
+		ready=true;
+	}
 	bool await_ready()
 		const noexcept
 	{
-		return false;
+		return ready;
 	}
 	void await_resume()
 		const noexcept
@@ -127,10 +148,13 @@ template<typename T>
 void PromiseType<T>::return_value(T v)
 {
 	task->rv=std::move(v);
+	//println("resuming outer task");
 	task->resume_outer();
+	//println("resumed outer task");
 }
 void PromiseType<void>::return_void()
 {
+	task->returned();
 	task->resume_outer();
 }
 export struct ReadAwaitable;
@@ -181,8 +205,12 @@ export struct ReadAwaitable
 };
 export void resumeAllAsyncRead()
 {
-	for(auto[p,c]:zip(globalReadQueue.first,globalReadQueue.second))
+	auto together=zip(globalReadQueue.first,globalReadQueue.second);
+	while(!together.empty())
 	{
+		auto[p,c]=together.back();
+		globalReadQueue.first.pop_back();
+		globalReadQueue.second.pop_back();
 		c.first->retval=p->readInto(c.first->buffer);
 		c.second.resume();
 	}
@@ -192,16 +220,19 @@ export ReadAwaitable readAsync(PipeHandle&file,span<char>buf)
 	using namespace chrono_literals;
 	optional<size_t>retval;
 	bool alreadyReady=false;
+	//println("sizes {} {}",globalReadQueue.first.size(),globalReadQueue.second.size());
 	globalReadQueue.first.push_back(&file);
 	auto res=selectPipeHandles(globalReadQueue.first,50ms);
+	println("selected");
 	if(res)
 	{
 		auto&ready=*res;
 		for(size_t ind:views::reverse(ready))
 		{
+			//println("ind is {}",ind);
 			if(ind==globalReadQueue.first.size()-1)
 			{
-				retval=globalReadQueue.first[ind]->readInto(globalReadQueue.second[ind].first->buffer);
+				retval=globalReadQueue.first[ind]->readInto(buf);
 				alreadyReady=true;
 			}
 			else
@@ -220,4 +251,16 @@ export ReadAwaitable readAsync(PipeHandle&file,span<char>buf)
 		globalReadQueue.first.pop_back();
 	}
 	return{&file,buf,std::move(retval)};
+}
+export Async<string>readAllAsync(PipeHandle&file)
+{
+	string txt;
+	array<char,8192>buf;
+	txt.reserve(8192);
+	println(__FUNCTION__);
+	for(optional<size_t>cntO=co_await readAsync(file,buf);cntO&&*cntO>0;cntO=co_await readAsync(file,buf))
+	{
+		txt.append_range(take(buf,*cntO));
+	}
+	co_return std::move(txt);
 }

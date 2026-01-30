@@ -80,10 +80,11 @@ public:
 			return path{options.artifact()};
 		}
 	}
-	void add_directory(const path&p,bool externalDirectory=false)
+	Async<>add_directory(const path&p,bool externalDirectory=false)
 	{
 		using namespace string_view_literals;
 		set<path>directoriesToCreate;
+		println(__FUNCTION__);
 		if(!externalDirectory&&options.objectDirectory().size())
 		{
 			path toBeCreated(getOutputFile(p));
@@ -94,7 +95,8 @@ public:
 			path current=en.path();
 			if(current.has_extension()&&isExtensionPermitted(current))
 			{
-				back.addFile(path(current),externalDirectory);
+				println("adding file {}",current.string());
+				co_await back.addFile(path(current),externalDirectory);
 				if(!externalDirectory&&options.objectDirectory().size())
 				{
 					directoriesToCreate.insert(getOutputFile(current.remove_filename()));
@@ -106,25 +108,31 @@ public:
 			create_directory(d);
 		}
 	}
-	bool loadedDependencies()
+	void waitAsync()
+	{
+		resumeAllAsyncRead();
+		pm.wait_remaining_processes();
+	}
+	Async<bool>loadedDependencies()
 	{
 		bool loaded=false;
+		println(__FUNCTION__);
 		if(options.dependencyCache().size())
 		{
 			ifstream ifs(static_cast<string>(options.dependencyCache()));
 			loaded=ifs.is_open();
 			if(loaded)
 			{
-				if(parseDependencies(back,ifs))
+				if(co_await parseDependencies(back,ifs))
 				{
 					back.buildModuleMap();
 					back.convertDependenciesToPath();
-					resolveUnresolvedDependencies(back);
+					co_await resolveUnresolvedDependencies(back);
 				}
 			}
 			//println("loaded {}",loaded);
 		}
-		return loaded;
+		co_return loaded;
 	}
 	void cacheDependencies()
 		const
@@ -132,23 +140,21 @@ public:
 		ofstream ofs(string{options.dependencyCache()});
 		dumpDependencies(back,ofs);
 	}
-	void cpbuild()
+	Async<>addAllFiles()
 	{
-		const string EMPTYSTRING="";
-		compiler->addArguments();
-		//println("{}",targets);
-		bool dependencyHasBeenLoaded=loadedDependencies();
+		println(__FUNCTION__);
+		bool dependencyHasBeenLoaded=co_await loadedDependencies();
 		if(!dependencyHasBeenLoaded)
 		{
 			for(path t:options.targets)
 			{
 				if(is_directory(t))
 				{
-					add_directory(t);
+					co_await add_directory(t);
 				}
 				else
 				{
-					back.addFile(std::move(t),false);
+					co_await back.addFile(std::move(t),false);
 				}
 			}
 			if(options.moduleMapCache().size())
@@ -159,7 +165,7 @@ public:
 				{
 					if(line.size())
 					{
-						back.addFile(path{line},true);
+						co_await back.addFile(path{line},true);
 					}
 				}
 				unsigned stdModules=back.checkForStandardModules();
@@ -167,29 +173,38 @@ public:
 				bool needStdCompat=!(stdModules>>1&1);
 				if(needStd)
 				{
-					back.addFile(compiler->getSTDModulePath(),true);
+					co_await back.addFile(compiler->getSTDModulePath(),true);
 				}
 				if(needStdCompat)
 				{
-					back.addFile(compiler->getSTDCompatModulePath(),true);
+					co_await back.addFile(compiler->getSTDCompatModulePath(),true);
 				}
 			}
 			else
 			{
 				if(compiler->getCompilerType()==LLVM)
 				{
-					back.addFile(path{compiler->getSTDModulePath()},true);
-					back.addFile(path{compiler->getSTDCompatModulePath()},true);
+					co_await back.addFile(path{compiler->getSTDModulePath()},true);
+					co_await back.addFile(path{compiler->getSTDCompatModulePath()},true);
 				}
 			}
 			back.convertDependenciesToPath();
-			resolveUnresolvedDependencies(back);
+			co_await resolveUnresolvedDependencies(back);
 		}
 		back.convertDependenciesToPath(true);
 		if(options.dependencyCache().size())
 		{
 			cacheDependencies();
 		}
+	}
+	void cpbuild()
+	{
+		const string EMPTYSTRING="";
+		compiler->addArguments();
+		//println("{}",targets);
+		Async<>_=addAllFiles();
+		println("started coroutine");
+		waitAsync();
 		if(options.isDumpDependencyGraph())
 		{
 			for(const auto&[p,data]:back)
@@ -200,7 +215,7 @@ public:
 		}
 		/*for(const auto&[p,data]:back)
 		{
-			println("{} {}",p,views::transform(data.depend,&ImportUnit::name));
+			println("back graph {} {}",p,views::transform(data.depend,&ImportUnit::name));
 		}*/
 		graph=makeForwardGraph(back,options.isForceRecompile(),options.isForceRecompileEnhanced());
 		queue<ForwardGraphNode>compileQueue=buildInitialCompileQueue(graph);
