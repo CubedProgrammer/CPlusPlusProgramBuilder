@@ -68,7 +68,6 @@ export unique_ptr<BaseCompilerConfigurer>getCompiler(const BuildConfiguration&co
 				insert=true;
 			}
 		}
-		println("searched include");
 		wait(dataO->first);
 	}
 	else

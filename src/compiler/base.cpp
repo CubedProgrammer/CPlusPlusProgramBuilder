@@ -231,7 +231,7 @@ public:
 		path out=replaceMove(*configuration,file,path{"ii"});
 		bool force=configuration->isForceRecompile()&&(!external||configuration->isForceRecompileEnhanced());
 		bool shouldPreprocess=force||isMoreRecent(file,out);
-		println(__FUNCTION__);
+		//println(__FUNCTION__);
 		if(shouldPreprocess)
 		{
 			string fileString=file.string();
@@ -257,7 +257,6 @@ public:
 			auto processHandle=manager->runAsync(preprocessCommand,configuration->isDisplayCommand(),PIPE_ERROR);
 			if(processHandle.pidO)
 			{
-				outOpt=std::move(out);
 				errOpt.emplace(co_await readAllAsync(processHandle.handle));
 			}
 			else
@@ -265,6 +264,10 @@ public:
 				println(cerr,"preprocessing {} failed",fileString);
 			}
 			co_await processHandle;
+			if(exists(out))
+			{
+				outOpt=std::move(out);
+			}
 		}
 		else
 		{
@@ -277,7 +280,7 @@ public:
 	Async<optional<pair<ModuleData,path>>>scanImports(const path&file,bool external)
 	{
 		optional<pair<ModuleData,path>>dataO;
-		println(__FUNCTION__);
+		//println(__FUNCTION__);
 		auto[pathO,errorO]=co_await preprocess(file,external);
 		if(pathO)
 		{

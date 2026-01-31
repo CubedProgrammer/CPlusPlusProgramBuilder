@@ -84,7 +84,7 @@ public:
 	{
 		using namespace string_view_literals;
 		set<path>directoriesToCreate;
-		println(__FUNCTION__);
+		//println(__FUNCTION__);
 		if(!externalDirectory&&options.objectDirectory().size())
 		{
 			path toBeCreated(getOutputFile(p));
@@ -95,8 +95,9 @@ public:
 			path current=en.path();
 			if(current.has_extension()&&isExtensionPermitted(current))
 			{
-				println("adding file {}",current.string());
+				//println("adding file {}",current.string());
 				co_await back.addFile(path(current),externalDirectory);
+				//println("added file {}",current.string());
 				if(!externalDirectory&&options.objectDirectory().size())
 				{
 					directoriesToCreate.insert(getOutputFile(current.remove_filename()));
@@ -107,6 +108,7 @@ public:
 		{
 			create_directory(d);
 		}
+		//println("add directory returning");
 	}
 	void waitAsync()
 	{
@@ -116,7 +118,7 @@ public:
 	Async<bool>loadedDependencies()
 	{
 		bool loaded=false;
-		println(__FUNCTION__);
+		//println(__FUNCTION__);
 		if(options.dependencyCache().size())
 		{
 			ifstream ifs(static_cast<string>(options.dependencyCache()));
@@ -142,7 +144,7 @@ public:
 	}
 	Async<>addAllFiles()
 	{
-		println(__FUNCTION__);
+		//println(__FUNCTION__);
 		bool dependencyHasBeenLoaded=co_await loadedDependencies();
 		if(!dependencyHasBeenLoaded)
 		{
@@ -150,13 +152,16 @@ public:
 			{
 				if(is_directory(t))
 				{
+					//println("adding directory {}",t.string());
 					co_await add_directory(t);
+					//println("added directory {}",t.string());
 				}
 				else
 				{
 					co_await back.addFile(std::move(t),false);
 				}
 			}
+			//println("added all internal files");
 			if(options.moduleMapCache().size())
 			{
 				ifstream fin(string{options.moduleMapCache()});
@@ -184,8 +189,11 @@ public:
 			{
 				if(compiler->getCompilerType()==LLVM)
 				{
+					//println("adding std");
 					co_await back.addFile(path{compiler->getSTDModulePath()},true);
+					//println("added std");
 					co_await back.addFile(path{compiler->getSTDCompatModulePath()},true);
+					//println("added compat");
 				}
 			}
 			back.convertDependenciesToPath();
@@ -203,7 +211,7 @@ public:
 		compiler->addArguments();
 		//println("{}",targets);
 		Async<>_=addAllFiles();
-		println("started coroutine");
+		//println("started coroutine");
 		waitAsync();
 		if(options.isDumpDependencyGraph())
 		{

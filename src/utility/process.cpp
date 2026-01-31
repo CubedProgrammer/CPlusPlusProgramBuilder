@@ -20,15 +20,17 @@ public:
 	size_t eraseProcess(int pid)
 	{
 		auto it=coroutines.find(pid);
+		auto r=processes.erase(pid);
 		if(it!=coroutines.end())
 		{
-			if(it->second)
-			{
-				it->second.resume();
-			}
+			auto c=it->second;
 			coroutines.erase(it);
+			if(c)
+			{
+				c.resume();
+			}
 		}
-		return processes.erase(pid);
+		return r;
 	}
 	optional<pair<int,PipeHandle>>run(span<string_view>args,bool printCommand,unsigned pipeTarget=PIPE_NOTHING)
 	{

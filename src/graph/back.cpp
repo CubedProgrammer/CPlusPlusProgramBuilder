@@ -85,7 +85,7 @@ public:
 	{
 		auto[it,success]=files[external].insert({p.string(),{}});
 		optional<iterator>io(iterator{&files,it,external});
-		println(__FUNCTION__);
+		//println(__FUNCTION__);
 		if(success)
 		{
 			optional<pair<ModuleData,path>>moduleDataO=co_await flagger->scanImports(p,external);

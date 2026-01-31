@@ -15,7 +15,7 @@ export Async<bool>parseDependencies(ProjectGraph&g,istream&in)
 	size_t index=0;
 	bool inside=false;
 	bool atLeastOneUpdated=false;
-	println(__FUNCTION__);
+	//println(__FUNCTION__);
 	while(!getline(in,ln).eof())
 	{
 		if(ln.front()==OPENING)
@@ -88,7 +88,7 @@ export void dumpDependencies(const ProjectGraph&g,ostream&out)
 Async<bool>attemptToResolveUsing(ProjectGraph&g,string_view module,unordered_set<string_view>&visited,queue<string_view>&q,span<const path>likely)
 {
 	bool found=false;
-	println(__FUNCTION__);
+	//println(__FUNCTION__);
 	for(const path&p:likely)
 	{
 		//println("checking {} against {}",module,p.string());
@@ -124,7 +124,7 @@ Async<bool>attemptToResolveUsing(ProjectGraph&g,string_view module,unordered_set
 export Async<>resolveUnresolvedDependencies(ProjectGraph&g)
 {
 	unordered_set<string_view>unresolvedImports;
-	println(__FUNCTION__);
+	//println(__FUNCTION__);
 	for(const auto&[filepath,filedata]:g)
 	{
 		for(const auto&[i,resolved]:filedata.dependResolved())
@@ -145,7 +145,7 @@ export Async<>resolveUnresolvedDependencies(ProjectGraph&g)
 	{
 		string_view sv=q.front();
 		q.pop();
-		println("unresolved {}",sv);
+		//println("unresolved {}",sv);
 		vector<path>likely=g.getCompiler()->searchForLikelyCandidates(sv);
 		//println("likely size {}",likely.size());
 		if(!co_await attemptToResolveUsing(g,sv,unresolvedImports,q,likely))

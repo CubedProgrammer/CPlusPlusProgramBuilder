@@ -56,7 +56,7 @@ public:
 		vector<ImportUnit>importedHeaders;
 		size_t beginIndex=0;
 		size_t endIndex=0;
-		println(__FUNCTION__);
+		//println(__FUNCTION__);
 		for(;beginIndex!=string::npos&&endIndex!=string::npos;beginIndex=endIndex+CLANG_HEADER_ERROR_END.size())
 		{
 			beginIndex=error.find(CLANG_HEADER_ERROR_BEGIN,endIndex);

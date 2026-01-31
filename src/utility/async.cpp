@@ -59,6 +59,10 @@ public:
 	{
 		//println("{} first outer address {}",(void*)this,outer.address());
 	}
+	AsyncBase(const AsyncBase&)=delete;
+	AsyncBase(AsyncBase&&)=delete;
+	AsyncBase&operator=(const AsyncBase&)=delete;
+	AsyncBase&operator=(AsyncBase&&)=delete;
 	void resume_outer()
 	{
 		//println("{} resuming outer address {}",(void*)this,outer.address());
@@ -67,7 +71,7 @@ public:
 		{
 			//println("resuming outer address {}",outer.address());
 			outer.resume();
-			outer=nullptr;
+			//outer=nullptr;
 		}
 	}
 	bool await_suspend(coroutine_handle<>hd)
@@ -76,10 +80,10 @@ public:
 		outer=hd;
 		return true;
 	}
-	~AsyncBase()
+	/*~AsyncBase()
 	{
-		//println("{}",(void*)this);
-	}
+		println("destroyed {}",(void*)this);
+	}*/
 };
 export template<typename T=void>
 class Async:public AsyncBase
@@ -133,7 +137,13 @@ public:
 	}
 	void await_resume()
 		const noexcept
-	{}
+	{
+		//println("async void resuming");
+	}
+	/*~Async()
+	{
+		println("destroyed {}",(void*)this);
+	}*/
 };
 template<typename T>
 Async<T>PromiseType<T>::get_return_object()
@@ -154,8 +164,11 @@ void PromiseType<T>::return_value(T v)
 }
 void PromiseType<void>::return_void()
 {
+	//println("void return task {}",(void*)task);
 	task->returned();
+	//println("void resume outer");
 	task->resume_outer();
+	//println("void resumed outer");
 }
 export struct ReadAwaitable;
 pair<vector<PipeHandle*>,vector<pair<ReadAwaitable*,coroutine_handle<>>>>globalReadQueue;
@@ -223,7 +236,7 @@ export ReadAwaitable readAsync(PipeHandle&file,span<char>buf)
 	//println("sizes {} {}",globalReadQueue.first.size(),globalReadQueue.second.size());
 	globalReadQueue.first.push_back(&file);
 	auto res=selectPipeHandles(globalReadQueue.first,50ms);
-	println("selected");
+	//println("selected");
 	if(res)
 	{
 		auto&ready=*res;
@@ -257,7 +270,7 @@ export Async<string>readAllAsync(PipeHandle&file)
 	string txt;
 	array<char,8192>buf;
 	txt.reserve(8192);
-	println(__FUNCTION__);
+	//println(__FUNCTION__);
 	for(optional<size_t>cntO=co_await readAsync(file,buf);cntO&&*cntO>0;cntO=co_await readAsync(file,buf))
 	{
 		txt.append_range(take(buf,*cntO));
