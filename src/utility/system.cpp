@@ -1,10 +1,15 @@
-module;
+/*module;
 #include<cerrno>
 #include<fcntl.h>
 #include<sys/select.h>
 #include<sys/wait.h>
-#include<unistd.h>
+#include<unistd.h>*/
 export module utility.system;
+import<cerrno>;
+import<fcntl.h>;
+import<sys/select.h>;
+import<sys/wait.h>;
+import<unistd.h>;
 export import std;
 using namespace std;
 using chrono::duration,chrono::microseconds;

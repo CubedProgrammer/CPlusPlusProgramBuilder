@@ -111,7 +111,7 @@ public:
 		return std::move(*rv);
 	}
 };
-export template<>
+template<>
 class Async<void>:public AsyncBase
 {
 	friend PromiseType<void>;

@@ -12,6 +12,7 @@ int mainpp(span<string_view>args)
 	array<string_view,2>emptyArgs;
 	if(args.size()==1)
 	{
+		println("inside if statement");
 		emptyPath=absolute(current_path()).filename().string()+".conf";
 		emptyArgs[0]="-b";
 		emptyArgs[1]=emptyPath;
@@ -21,9 +22,24 @@ int mainpp(span<string_view>args)
 	{
 		args=args.subspan(1);
 	}
+	println("before parsing config");
 	BuildConfiguration configuration=parseBuildConfiguration(args);
-	if(configuration.isHelp()||configuration.isVersion())
+	println("{} after parsing config",configuration.targets);
+	if(configuration.isHelp()||configuration.isVersion()||configuration.isInitialize())
 	{
+		if(configuration.isInitialize())
+		{
+			if(!filesystem::create_directory("bin"))
+			{
+				println(cerr,"Creating directory bin failed.");
+			}
+			if(!filesystem::create_directory("src"))
+			{
+				println(cerr,"Creating directory src failed.");
+			}
+			ofstream out(configuration.getFinalOutputFile().replace_extension("conf").string());
+			out<<"-c\n{\n-Wall\n}\n--dependency-cache\n-s\n-j4\n-o\nbin\nsrc\n";
+		}
 		if(configuration.isVersion())
 		{
 			println("{} version {}.{}.{}",program,MAJOR,MINOR,PATCH);
@@ -39,6 +55,7 @@ int mainpp(span<string_view>args)
 			println("-{} FILE: Specify the path to the artifact, the final product of compilation.",ARTIFACT_OPTION_FLAG);
 			println("-{}{{N}}: Specifies that N processess allowed to run in parallel, set this to the number of threads on this computer for maximum performance.",PARALLEL_OPTION_FLAG);
 			println("-{} FILE: Read options from this file, the file must have one option per line.",FILE_OPTION_FLAG);
+			println("-{}: Initialize the current directory as a project with a simple configuration file.",INITIALIZE_OPTION_FLAG);
 			println("--compiler FILE: Specifies the path to the compiler to use.");
 			println("--display-module-map: Print a list of values, the paths of the module interface units of the external modules imported.");
 			println("--module-interface FILE: Read the specified file for the list of external module interface units to read, one file per line.");
@@ -54,6 +71,7 @@ int mainpp(span<string_view>args)
 			configuration.targets.push_back(".");
 		}
 		ProgramBuilder&builder=ProgramBuilder::getInstance(std::move(configuration));
+		println("got instance");
 		builder.cpbuild();
 	}
 	return 0;

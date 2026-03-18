@@ -59,27 +59,6 @@ public:
 	{
 		return replaceMove(options,std::move(p),path{"o"});
 	}
-	path getFinalOutputFile()
-		const noexcept
-	{
-		if(options.artifact().size()==0)
-		{
-			if(options.targets.size()&&is_regular_file(path{options.targets.front()}))
-			{
-				path output(options.targets.front());
-				output.replace_extension();
-				return output;
-			}
-			else
-			{
-				return absolute(current_path()).filename();
-			}
-		}
-		else
-		{
-			return path{options.artifact()};
-		}
-	}
 	Async<>add_directory(const path&p,bool externalDirectory=false)
 	{
 		using namespace string_view_literals;
@@ -273,10 +252,10 @@ public:
 						println(cerr,"Compiling {} failed",node.name);
 					}
 				}
-				else if(options.isDisplayCommand())
+				/*else if(options.isDisplayCommand())
 				{
 					println("{} does not need to be recompiled",node.name);
-				}
+				}*/
 				for(const auto&other:data.dependent)
 				{
 					ForwardGraphNodeData&otherData=graph.at(other);
@@ -307,7 +286,7 @@ public:
 			}
 		}
 		pm.wait_remaining_processes();
-		string product=getFinalOutputFile().string();
+		string product=options.getFinalOutputFile().string();
 		compiler->link(product,linkerArguments);
 		pm.wait_remaining_processes();
 	}

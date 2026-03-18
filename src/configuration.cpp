@@ -1,6 +1,7 @@
 export module configuration;
 export import std;
 using namespace std;
+using filesystem::current_path,filesystem::path;
 export constexpr char COMPILER_OPTION_FLAG='c';
 export constexpr char LINKER_OPTION_FLAG='l';
 export constexpr char OUTPUT_OPTION_FLAG='o';
@@ -9,6 +10,7 @@ export constexpr char FORCE_OPTION_FLAG='f';
 export constexpr char ARTIFACT_OPTION_FLAG='a';
 export constexpr char PARALLEL_OPTION_FLAG='j';
 export constexpr char FILE_OPTION_FLAG='b';
+export constexpr char INITIALIZE_OPTION_FLAG='i';
 constexpr char LONG_OPTION_FLAG='-';
 export constexpr string_view CBP_COMPILER_NAME="c++";
 constexpr string_view CURLY_BRACES="{}";
@@ -60,6 +62,11 @@ export struct BuildConfiguration
 	{
 		return(binaryOptions>>6&1)==1;
 	}
+	bool isInitialize()
+		const noexcept
+	{
+		return(binaryOptions>>7&1)==1;
+	}
 	void setDisplayCommand()
 		noexcept
 	{
@@ -95,6 +102,11 @@ export struct BuildConfiguration
 	{
 		binaryOptions|=64;
 	}
+	void setInitialize()
+		noexcept
+	{
+		binaryOptions|=128;
+	}
 	constexpr decltype(auto)compiler(this auto&self)
 		noexcept
 	{
@@ -119,6 +131,27 @@ export struct BuildConfiguration
 		noexcept
 	{
 		return self.svOptions[4];
+	}
+	path getFinalOutputFile()
+		const noexcept
+	{
+		if(artifact().size()==0)
+		{
+			if(targets.size()&&is_regular_file(path{targets.front()}))
+			{
+				path output(targets.front());
+				output.replace_extension();
+				return output;
+			}
+			else
+			{
+				return absolute(current_path()).filename();
+			}
+		}
+		else
+		{
+			return path{artifact()};
+		}
 	}
 };
 string read_option_file(string_view fname)
@@ -236,6 +269,9 @@ export BuildConfiguration parseBuildConfiguration(span<string_view>arguments)
 						break;
 					case FILE_OPTION_FLAG:
 						nextOptionFile=true;
+						break;
+					case INITIALIZE_OPTION_FLAG:
+						configuration.setInitialize();
 						break;
 					case LONG_OPTION_FLAG:
 						flagname=sv.substr(2);

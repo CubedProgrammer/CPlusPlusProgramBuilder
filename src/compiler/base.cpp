@@ -222,7 +222,6 @@ public:
 		const
 	{}
 	virtual void addSpecificPreprocessArguments(vector<string_view>&args)
-		const
 	{}
 	Async<pair<optional<path>,optional<string>>>preprocess(const path&file,bool external)
 	{

@@ -40,7 +40,6 @@ public:
 		}
 	}
 	virtual void addSpecificPreprocessArguments(vector<string_view>&args)
-		const
 	{
 		args.push_back(CBP_STDLIB_FLAG);
 		for(const string&s:clangHeaderOutputs)

@@ -11,8 +11,16 @@ export class GCCConfigurer:public BaseCompilerConfigurer
 public:
 	static constexpr CompilerType TYPE=GNU;
 	GCCConfigurer(vector<string>id,const BuildConfiguration*c,ParallelProcessManager*m)
-		:BaseCompilerConfigurer(TYPE,std::move(id),c,m)
-	{}
+		:BaseCompilerConfigurer(TYPE,std::move(id),c,m),moduleMapperFlag(CBP_GCC_MAPPER_FLAG)
+	{
+		moduleMapperFlag.push_back('=');
+		moduleMapperFlag+=configuration->objectDirectory();
+		if(configuration->objectDirectory().size()>0)
+		{
+			moduleMapperFlag.push_back('/');
+		}
+		moduleMapperFlag+="module.map";
+	}
 	GCCConfigurer()
 		:GCCConfigurer(vector<string>{},nullptr,nullptr)
 	{}
@@ -26,6 +34,10 @@ public:
 	{
 		return".gcm";
 	}
+	virtual void addSpecificPreprocessArguments(vector<string_view>&args)
+	{
+		args.push_back(moduleMapperFlag);
+	}
 	virtual Async<optional<pair<ModuleData,path>>>onPreprocessError(const path&file,const string&error,bool external)
 	{
 		print(cerr,"{}",error);
@@ -33,17 +45,8 @@ public:
 	}
 	virtual void addCompilerSpecificArguments()
 	{
-		string_view dir=".";
+		string_view dir=configuration->objectDirectory().size()?configuration->objectDirectory():".";
 		compilerArguments.push_back(CBP_GCC_MODULE_FLAG);
-		moduleMapperFlag=CBP_GCC_MAPPER_FLAG;
-		moduleMapperFlag.push_back('=');
-		moduleMapperFlag+=configuration->objectDirectory();
-		if(configuration->objectDirectory().size()>0)
-		{
-			moduleMapperFlag.push_back('/');
-			dir=configuration->objectDirectory();
-		}
-		moduleMapperFlag+="module.map";
 		compilerArguments.push_back(moduleMapperFlag);
 		directory_iterator it(dir);
 		path extension(getModuleExtension());
